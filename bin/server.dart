@@ -17,6 +17,11 @@ void main() async {
 
   final router = Router();
 
+  // Add this root route
+  router.get('/', (Request req) async {
+    return Response.ok('Mipripity API is running');
+  });
+
   router.get('/ping', (Request req) async {
     return Response.ok('API is live');
   });
