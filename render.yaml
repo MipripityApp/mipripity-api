@@ -8,4 +8,4 @@ databases:
   - source: 0.0.0.0/0
     description: everywhere
   postgresMajorVersion: "15"
-  version: 1.0.0
+  version: "15.4"
