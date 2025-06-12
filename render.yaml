@@ -1,0 +1,12 @@
+name: mipripity_api
+databases:
+- name: mipripity_db
+  databaseName: mipripity_app
+  user: mipripity_user
+  plan: free
+  region: frankfurt
+  ipAllowList:
+  - source: 0.0.0.0/0
+    description: everywhere
+  postgresMajorVersion: "15"
+  version: 1
