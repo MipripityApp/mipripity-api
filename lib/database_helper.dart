@@ -1,83 +1,31 @@
 import 'dart:io';
 import 'package:postgres/postgres.dart';
-import 'package:yaml/yaml.dart';
 
-/// Database connection helper that loads configuration from pubspec.yaml
+/// Database connection helper with hardcoded Render.com configuration
 class DatabaseHelper {
-  /// Load database configuration from pubspec.yaml file
-  static Map<String, dynamic> loadDbConfig() {
-    try {
-      // Read the pubspec.yaml file
-      final File pubspecFile = File('pubspec.yaml');
-      if (!pubspecFile.existsSync()) {
-        throw Exception('pubspec.yaml file not found');
-      }
+  // Hardcoded database configuration for Render.com
+  static const String _host = 'dpg-d159reffte5s738vedk0-a.frankfurt-postgres.render.com';
+  static const int _port = 5432;
+  static const String _databaseName = 'mipripity_app';
+  static const String _username = 'mipripity_user';
+  static const String _password = 'jwMRrsn2O9LNHqm83byh6XxYxV7tqmYz';
 
-      final String pubspecContent = pubspecFile.readAsStringSync();
-      final dynamic pubspecYaml = loadYaml(pubspecContent);
-
-      // Get the database configuration
-      final List<dynamic> databases = pubspecYaml['databases'] ?? [];
-      if (databases.isEmpty) {
-        throw Exception('No database configuration found in pubspec.yaml');
-      }
-
-      // Find the mipripity_db configuration
-      final dynamic dbConfig = databases.firstWhere(
-        (db) => db['name'] == 'mipripity_db',
-        orElse: () => null,
-      );
-
-      if (dbConfig == null) {
-        throw Exception('mipripity_db configuration not found in pubspec.yaml');
-      }
-
-      // Extract the database configuration
-      return {
-        'databaseName': dbConfig['databaseName'] as String,
-        'user': dbConfig['user'] as String,
-        'region': dbConfig['region'] as String,
-        'plan': dbConfig['plan'] as String,
-        'postgresMajorVersion': dbConfig['postgresMajorVersion'] as String,
-      };
-    } catch (e) {
-      print('Error loading database configuration: $e');
-      // Return default values if configuration cannot be loaded
-      return {
-        'databaseName': 'mipripity_app',
-        'user': 'mipripity_user',
-        'region': 'frankfurt',
-        'plan': 'free',
-        'postgresMajorVersion': '15',
-      };
-    }
-  }
-
-  /// Create a PostgreSQL connection using the configuration from pubspec.yaml
+  /// Create a PostgreSQL connection with the configured settings
   static PostgreSQLConnection createConnection() {
-    final dbConfig = loadDbConfig();
-    
-    // Construct the host based on the region
-    // For render.com, the format is usually region.postgres.render.com
-    final host = Platform.environment['DB_HOST'] ?? 
-                '${dbConfig['region']}.postgres.render.com';
-    
-    // Get database name and user from config
-    final databaseName = Platform.environment['DB_NAME'] ?? 
-                        dbConfig['databaseName'];
-    
-    final user = Platform.environment['DB_USER'] ?? 
-                dbConfig['user'];
-    
-    // Password should be provided via environment variable for security
-    final password = Platform.environment['DB_PASSWORD'] ?? '';
-    
+    // Allow environment variables to override hardcoded values if needed
+    final host = Platform.environment['DB_HOST'] ?? _host;
+    final port = int.tryParse(Platform.environment['DB_PORT'] ?? '') ?? _port;
+    final databaseName = Platform.environment['DB_NAME'] ?? _databaseName;
+    final username = Platform.environment['DB_USER'] ?? _username;
+    final password = Platform.environment['DB_PASSWORD'] ?? _password;
+
     return PostgreSQLConnection(
       host,
-      5432, // Default PostgreSQL port
+      port,
       databaseName,
-      username: user,
+      username: username,
       password: password,
+      useSSL: true, // Render requires SSL
     );
   }
 
@@ -93,5 +41,19 @@ class DatabaseHelper {
       print('Failed to connect to the database: $e');
       rethrow;
     }
+  }
+
+  /// Alternative direct connection method (matches your original request exactly)
+  static Future<PostgreSQLConnection> connectDirect() async {
+    final connection = PostgreSQLConnection(
+      'dpg-d159reffte5s738vedk0-a.frankfurt-postgres.render.com', // host
+      5432, // port
+      'mipripity_app', // database name
+      username: 'mipripity_user',
+      password: 'jwMRrsn2O9LNHqm83byh6XxYxV7tqmYz',
+      useSSL: true, // Render requires SSL
+    );
+    await connection.open();
+    return connection;
   }
 }
