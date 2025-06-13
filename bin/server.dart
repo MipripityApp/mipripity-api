@@ -134,9 +134,27 @@ void main() async {
     return Response.ok(jsonEncode({'success': true, 'id': id.first[0]}), headers: {'Content-Type': 'application/json'});
   });
 
-  final handler = Pipeline()
-      .addMiddleware(logRequests())
-      .addHandler(router);
+  Response _cors(Response response) => response.change(
+  headers: {
+    ...response.headers,
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+    'Access-Control-Allow-Headers': 'Origin, Content-Type, Accept, Authorization',
+  },
+);
+
+final handler = Pipeline()
+    .addMiddleware(logRequests())
+    .addMiddleware((innerHandler) {
+      return (request) async {
+        if (request.method == 'OPTIONS') {
+          return _cors(Response.ok(''));
+        }
+        final response = await innerHandler(request);
+        return _cors(response);
+      };
+    })
+    .addHandler(router);
 
   final port = int.parse(Platform.environment['PORT'] ?? '8080');
   final server = await serve(handler, InternetAddress.anyIPv4, port);
