@@ -32,11 +32,28 @@ void main() async {
   return Response.ok('Mipripity API is running');
   });
   
+  // Helper to convert DateTime fields to string
+  Map<String, dynamic> _convertDateTimes(Map<String, dynamic> map) {
+    final result = <String, dynamic>{};
+    map.forEach((key, value) {
+      if (value is DateTime) {
+        result[key] = value.toIso8601String();
+      } else {
+        result[key] = value;
+      }
+    });
+    return result;
+  }
+
   // Register user
   router.get('/users', (Request req) async {
-    final results = await db.mappedResultsQuery('SELECT * FROM users');
-    final users = results.map((row) => row['users']).toList();
-    return Response.ok(jsonEncode(users), headers: {'Content-Type': 'application/json'});
+  final results = await db.mappedResultsQuery('SELECT * FROM users');
+  final users = results.map((row) => _convertDateTimes(row['users'] ?? {})).toList();
+  // Remove password from each user
+  for (final user in users) {
+    user.remove('password');
+  }
+  return Response.ok(jsonEncode(users), headers: {'Content-Type': 'application/json'});
   });
   router.post('/users', (Request req) async {
     final payload = await req.readAsString();
@@ -72,6 +89,7 @@ void main() async {
   });
 
   // Login user
+
   router.post('/auth/login', (Request req) async {
     final payload = await req.readAsString();
     final data = jsonDecode(payload);
@@ -93,19 +111,6 @@ void main() async {
     user?.remove('password');
     return Response.ok(jsonEncode({'success': true, 'user': user}), headers: {'Content-Type': 'application/json'});
   });
-
-  // Helper to convert DateTime fields to string
-  Map<String, dynamic> _convertDateTimes(Map<String, dynamic> map) {
-    final result = <String, dynamic>{};
-    map.forEach((key, value) {
-      if (value is DateTime) {
-        result[key] = value.toIso8601String();
-      } else {
-        result[key] = value;
-      }
-    });
-    return result;
-  }
 
   // Get all properties (returns JSON)
   router.post('/properties', (Request req) async {
@@ -129,29 +134,30 @@ void main() async {
     return Response.ok(jsonEncode({'success': true, 'id': id.first[0]}), headers: {'Content-Type': 'application/json'});
   });
   router.get('/properties', (Request req) async {
-    final results = await db.mappedResultsQuery('SELECT * FROM properties');
-    final properties = results.map((row) => row['properties']).toList();
-    return Response.ok(jsonEncode(properties), headers: {'Content-Type': 'application/json'});
+  final results = await db.mappedResultsQuery('SELECT * FROM properties');
+  final properties = results.map((row) => _convertDateTimes(row['properties'] ?? {})).toList();
+  return Response.ok(jsonEncode(properties), headers: {'Content-Type': 'application/json'});
   });
 
   router.get('/properties/residential', (Request req) async {
-    final results = await db.mappedResultsQuery("SELECT * FROM properties WHERE type = 'residential'");
-    final properties = results.map((row) => row['properties']).toList();
-    return Response.ok(jsonEncode(properties), headers: {'Content-Type': 'application/json'});
+  final results = await db.mappedResultsQuery("SELECT * FROM properties WHERE type = 'residential'");
+  final properties = results.map((row) => _convertDateTimes(row['properties'] ?? {})).toList();
+  return Response.ok(jsonEncode(properties), headers: {'Content-Type': 'application/json'});
   });
 
   router.get('/properties/commercial', (Request req) async {
-    final results = await db.mappedResultsQuery("SELECT * FROM properties WHERE type = 'commercial'");
-    final properties = results.map((row) => row['properties']).toList();
-    return Response.ok(jsonEncode(properties), headers: {'Content-Type': 'application/json'});
+  final results = await db.mappedResultsQuery("SELECT * FROM properties WHERE type = 'commercial'");
+  final properties = results.map((row) => _convertDateTimes(row['properties'] ?? {})).toList();
+  return Response.ok(jsonEncode(properties), headers: {'Content-Type': 'application/json'});
   });
 
+  // GET /properties/:id
   router.get('/properties/:id', (Request req, String id) async {
     final results = await db.mappedResultsQuery('SELECT * FROM properties WHERE id = @id', substitutionValues: {'id': int.parse(id)});
     if (results.isEmpty) {
       return Response.notFound(jsonEncode({'error': 'Property not found'}), headers: {'Content-Type': 'application/json'});
     }
-    final property = results.first['properties'];
+    final property = _convertDateTimes(results.first['properties'] ?? {});
     return Response.ok(jsonEncode(property), headers: {'Content-Type': 'application/json'});
   });
 
