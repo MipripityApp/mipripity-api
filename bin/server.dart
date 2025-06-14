@@ -28,6 +28,10 @@ void main() async {
 
   final router = Router();
 
+  router.get('/', (Request req) async {
+  return Response.ok('Mipripity API is running');
+  });
+  
   // Register user
   router.post('/users', (Request req) async {
     final payload = await req.readAsString();
