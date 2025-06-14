@@ -126,6 +126,10 @@ void main() async {
       return Response.badRequest(body: jsonEncode({'error': 'Missing required fields: title, type, location'}), headers: {'Content-Type': 'application/json'});
     }
 
+    router.all('/<ignored|.*>', (Request req) {
+  return Response.notFound(jsonEncode({'error': 'Route not found: ${req.url}'}), headers: {'Content-Type': 'application/json'});
+  });
+
     final id = await db.query(
       'INSERT INTO properties (title, type, location) VALUES (@title, @type, @location) RETURNING id',
       substitutionValues: {
