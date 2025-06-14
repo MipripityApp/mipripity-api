@@ -33,6 +33,11 @@ void main() async {
   });
   
   // Register user
+  router.get('/users', (Request req) async {
+    final results = await db.mappedResultsQuery('SELECT * FROM users');
+    final users = results.map((row) => row['users']).toList();
+    return Response.ok(jsonEncode(users), headers: {'Content-Type': 'application/json'});
+  });
   router.post('/users', (Request req) async {
     final payload = await req.readAsString();
     final data = jsonDecode(payload);
@@ -89,7 +94,40 @@ void main() async {
     return Response.ok(jsonEncode({'success': true, 'user': user}), headers: {'Content-Type': 'application/json'});
   });
 
+  // Helper to convert DateTime fields to string
+  Map<String, dynamic> _convertDateTimes(Map<String, dynamic> map) {
+    final result = <String, dynamic>{};
+    map.forEach((key, value) {
+      if (value is DateTime) {
+        result[key] = value.toIso8601String();
+      } else {
+        result[key] = value;
+      }
+    });
+    return result;
+  }
+
   // Get all properties (returns JSON)
+  router.post('/properties', (Request req) async {
+    final payload = await req.readAsString();
+    final data = Map<String, dynamic>.from(jsonDecode(payload));
+
+    // Validate required fields (update as needed)
+    if (!data.containsKey('title') || !data.containsKey('type') || !data.containsKey('location')) {
+      return Response.badRequest(body: jsonEncode({'error': 'Missing required fields: title, type, location'}), headers: {'Content-Type': 'application/json'});
+    }
+
+    final id = await db.query(
+      'INSERT INTO properties (title, type, location) VALUES (@title, @type, @location) RETURNING id',
+      substitutionValues: {
+        'title': data['title'],
+        'type': data['type'],
+        'location': data['location'],
+      },
+    );
+
+    return Response.ok(jsonEncode({'success': true, 'id': id.first[0]}), headers: {'Content-Type': 'application/json'});
+  });
   router.get('/properties', (Request req) async {
     final results = await db.mappedResultsQuery('SELECT * FROM properties');
     final properties = results.map((row) => row['properties']).toList();
