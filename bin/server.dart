@@ -89,27 +89,71 @@ void main() async {
   });
 
   // Login user
-
   router.post('/auth/login', (Request req) async {
-    final payload = await req.readAsString();
-    final data = jsonDecode(payload);
+    try {
+      final payload = await req.readAsString();
+      final data = jsonDecode(payload);
 
-    final email = data['email'];
-    final password = data['password'];
+      // Validate input
+      if (data['email'] == null || data['password'] == null) {
+        return Response(400, 
+          body: jsonEncode({
+            'success': false,
+            'error': 'Email and password are required'
+          }),
+          headers: {'Content-Type': 'application/json'}
+        );
+      }
 
-    final results = await db.mappedResultsQuery('SELECT * FROM users WHERE email = @e', substitutionValues: {'e': email});
-    if (results.isEmpty) {
-      return Response(401, body: jsonEncode({'error': 'Invalid credentials'}), headers: {'Content-Type': 'application/json'});
+      final email = data['email'];
+      final password = data['password'];
+
+      final results = await db.mappedResultsQuery(
+        'SELECT * FROM users WHERE email = @e',
+        substitutionValues: {'e': email}
+      );
+
+      if (results.isEmpty) {
+        return Response(401,
+          body: jsonEncode({
+            'success': false,
+            'error': 'Invalid email or password'
+          }),
+          headers: {'Content-Type': 'application/json'}
+        );
+      }
+
+      final user = results.first['users'];
+      if (!verifyPassword(password, user?['password'])) {
+        return Response(401,
+          body: jsonEncode({
+            'success': false,
+            'error': 'Invalid email or password'
+          }),
+          headers: {'Content-Type': 'application/json'}
+        );
+      }
+
+      // Remove sensitive data
+      user?.remove('password');
+      
+      return Response.ok(
+        jsonEncode({
+          'success': true,
+          'user': user
+        }),
+        headers: {'Content-Type': 'application/json'}
+      );
+    } catch (e) {
+      print('Login error: $e');
+      return Response.internalServerError(
+        body: jsonEncode({
+          'success': false,
+          'error': 'An unexpected error occurred'
+        }),
+        headers: {'Content-Type': 'application/json'}
+      );
     }
-
-    final user = results.first['users'];
-    if (!verifyPassword(password, user?['password'])) {
-      return Response(401, body: jsonEncode({'error': 'Invalid credentials'}), headers: {'Content-Type': 'application/json'});
-    }
-
-    // Remove password from response
-    user?.remove('password');
-    return Response.ok(jsonEncode({'success': true, 'user': user}), headers: {'Content-Type': 'application/json'});
   });
 
   // Get all properties (returns JSON)
