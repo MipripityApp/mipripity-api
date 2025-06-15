@@ -151,6 +151,18 @@ void main() async {
   return Response.ok(jsonEncode(properties), headers: {'Content-Type': 'application/json'});
   });
 
+  router.get('/properties/land', (Request req) async {
+  final results = await db.mappedResultsQuery("SELECT * FROM properties WHERE type = 'land'");
+  final properties = results.map((row) => _convertDateTimes(row['properties'] ?? {})).toList();
+  return Response.ok(jsonEncode(properties), headers: {'Content-Type': 'application/json'});
+  });
+
+  router.get('/properties/material', (Request req) async {
+  final results = await db.mappedResultsQuery("SELECT * FROM properties WHERE type = 'material'");
+  final properties = results.map((row) => _convertDateTimes(row['properties'] ?? {})).toList();
+  return Response.ok(jsonEncode(properties), headers: {'Content-Type': 'application/json'});
+  });
+
   // GET /properties/:id
   router.get('/properties/:id', (Request req, String id) async {
     final results = await db.mappedResultsQuery('SELECT * FROM properties WHERE id = @id', substitutionValues: {'id': int.parse(id)});
