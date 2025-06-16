@@ -207,8 +207,8 @@ void main() async {
   return Response.ok(jsonEncode(properties), headers: {'Content-Type': 'application/json'});
   });
 
-  // GET /properties/:id
-  router.get('/properties/:id', (Request req, String id) async {
+  // GET /properties/<id>
+  router.get('/properties/<id>', (Request req, String id) async {
     final results = await db.mappedResultsQuery('SELECT * FROM properties WHERE id = @id', substitutionValues: {'id': int.parse(id)});
     if (results.isEmpty) {
       return Response.notFound(jsonEncode({'error': 'Property not found'}), headers: {'Content-Type': 'application/json'});
