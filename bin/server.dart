@@ -209,13 +209,22 @@ void main() async {
 
   // GET /properties/<id>
   router.get('/properties/<id>', (Request req, String id) async {
-    final results = await db.mappedResultsQuery('SELECT * FROM properties WHERE id = @id', substitutionValues: {'id': int.parse(id)});
-    if (results.isEmpty) {
-      return Response.notFound(jsonEncode({'error': 'Property not found'}), headers: {'Content-Type': 'application/json'});
-    }
-    final property = _convertDateTimes(results.first['properties'] ?? {});
-    return Response.ok(jsonEncode(property), headers: {'Content-Type': 'application/json'});
-  });
+  final results = await db.mappedResultsQuery(
+    'SELECT * FROM properties WHERE id = @id',
+    substitutionValues: {'id': int.parse(id)},
+  );
+  if (results.isEmpty) {
+    return Response.notFound(
+      jsonEncode({'error': 'Property not found'}),
+      headers: {'Content-Type': 'application/json'},
+    );
+  }
+  final property = _convertDateTimes(results.first['properties'] ?? {});
+  return Response.ok(
+    jsonEncode(property),
+    headers: {'Content-Type': 'application/json'},
+  );
+});
 
   router.post('/properties', (Request req) async {
     final payload = await req.readAsString();
