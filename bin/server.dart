@@ -6,6 +6,20 @@ import 'package:shelf_router/shelf_router.dart';
 import 'package:postgres/postgres.dart';
 import 'package:mipripity_api/database_helper.dart';
 import 'package:crypto/crypto.dart';
+import 'package:dart_jsonwebtoken/dart_jsonwebtoken.dart';
+
+final jwtSecret = Platform.environment['JWT_SECRET'] ?? 
+    'yGCUZ7LWl7j-P_ahUlSWoB69bvAZoJVIuu7bTMLik3A=';  
+// Add this function
+String generateToken(int userId) {
+  final jwt = JWT(
+    {
+      'id': userId,
+      'iat': DateTime.now().millisecondsSinceEpoch ~/ 1000,
+    },
+  );
+  return jwt.sign(SecretKey(jwtSecret));
+}
 
 String hashPassword(String password) {
   return sha256.convert(utf8.encode(password)).toString();
@@ -123,27 +137,34 @@ void main() async {
         );
       }
 
-      final user = results.first['users'];
-      if (!verifyPassword(password, user?['password'])) {
-        return Response(401,
-          body: jsonEncode({
-            'success': false,
-            'error': 'Invalid email or password'
-          }),
-          headers: {'Content-Type': 'application/json'}
-        );
-      }
-
-      // Remove sensitive data
-      user?.remove('password');
-      
-      return Response.ok(
-        jsonEncode({
-          'success': true,
-          'user': user
+    var user = results.first['users'];
+    if (!verifyPassword(password, user?['password'])) {
+      return Response(401,
+        body: jsonEncode({
+          'success': false,
+          'error': 'Invalid email or password'
         }),
         headers: {'Content-Type': 'application/json'}
       );
+    }
+    // Generate token after successful password verification
+    final token = generateToken(user?['id']);
+    // Add token to user data
+    user?['token'] = token;
+    // Convert DateTime fields to string
+    user = _convertDateTimes(user ?? {});
+
+    // Remove sensitive data
+    user?.remove('password');
+    
+    return Response.ok(
+      jsonEncode({
+        'success': true,
+        'token': token,
+        'user': user
+      }),
+      headers: {'Content-Type': 'application/json'}
+    );
     } catch (e) {
       print('Login error: $e');
       return Response.internalServerError(
@@ -155,6 +176,56 @@ void main() async {
       );
     }
   });
+  router.post('/auth/verify', (Request req) async {
+  final authHeader = req.headers['authorization'];
+  if (authHeader == null || !authHeader.startsWith('Bearer ')) {
+    return Response(401);
+  }
+
+  try {
+    final token = authHeader.substring(7);
+    JWT.verify(token, SecretKey(jwtSecret));
+    return Response.ok(
+      jsonEncode({'success': true}),
+      headers: {'Content-Type': 'application/json'}
+    );
+  } catch (e) {
+    return Response(401);
+  }
+});
+
+  Middleware verifyAuth() {
+  return (Handler innerHandler) {
+    return (Request request) async {
+      final authHeader = request.headers['authorization'];
+      if (authHeader == null || !authHeader.startsWith('Bearer ')) {
+        return Response(401, 
+          body: jsonEncode({
+            'success': false,
+            'error': 'Authentication required'
+          }),
+          headers: {'Content-Type': 'application/json'}
+        );
+      }
+
+      try {
+        final token = authHeader.substring(7);
+        JWT.verify(token, SecretKey(jwtSecret));
+        return innerHandler(request);
+      } catch (e) {
+        return Response(401,
+          body: jsonEncode({
+            'success': false,
+            'error': 'Invalid token'
+          }),
+          headers: {'Content-Type': 'application/json'}
+        );
+      }
+    };
+  };
+}
+  // Middleware to verify authentication
+  router.all('/users/<ignored|.*>', verifyAuth());
 
   // Get all properties (returns JSON)
   router.post('/properties', (Request req) async {
@@ -251,6 +322,15 @@ void main() async {
   },
 );
 
+bool _isProtectedRoute(String path) {
+  final publicRoutes = [
+    '/auth/login',
+    '/auth/register',
+    '/',
+  ];
+  return !publicRoutes.contains(path);
+}
+
 final handler = Pipeline()
     .addMiddleware(logRequests())
     .addMiddleware((innerHandler) {
@@ -258,6 +338,13 @@ final handler = Pipeline()
         if (request.method == 'OPTIONS') {
           return _cors(Response.ok(''));
         }
+        
+        // Add authentication for protected routes
+        if (_isProtectedRoute(request.url.path)) {
+          final response = await verifyAuth()(innerHandler)(request);
+          return _cors(response);
+        }
+        
         final response = await innerHandler(request);
         return _cors(response);
       };
@@ -266,5 +353,5 @@ final handler = Pipeline()
 
   final port = int.parse(Platform.environment['PORT'] ?? '8080');
   final server = await serve(handler, InternetAddress.anyIPv4, port);
-  print('Server listening on port ${server.port}');
+  print('Server running on http://${server.address.host}:${server.port}');
 }
