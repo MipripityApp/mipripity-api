@@ -207,24 +207,12 @@ void main() async {
   return Response.ok(jsonEncode(properties), headers: {'Content-Type': 'application/json'});
   });
 
-  // GET /properties/<id>
-  router.get('/properties/<id>', (Request req, String id) async {
-  final results = await db.mappedResultsQuery(
-    'SELECT * FROM properties WHERE id = @id',
-    substitutionValues: {'id': int.parse(id)},
-  );
-  if (results.isEmpty) {
-    return Response.notFound(
-      jsonEncode({'error': 'Property not found'}),
-      headers: {'Content-Type': 'application/json'},
-    );
-  }
-  final property = _convertDateTimes(results.first['properties'] ?? {});
-  return Response.ok(
-    jsonEncode(property),
-    headers: {'Content-Type': 'application/json'},
-  );
-});
+  // GET /properties/property_id
+  router.get('/properties/property_id', (Request req) async {
+  final results = await db.mappedResultsQuery("SELECT * FROM properties WHERE type = 'property_id'");
+  final properties = results.map((row) => _convertDateTimes(row['properties'] ?? {})).toList();
+  return Response.ok(jsonEncode(properties), headers: {'Content-Type': 'application/json'});
+  });
 
   router.post('/properties', (Request req) async {
     final payload = await req.readAsString();
