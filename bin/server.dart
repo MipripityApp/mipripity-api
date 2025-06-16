@@ -29,7 +29,29 @@ bool verifyPassword(String password, String hash) {
   return hashPassword(password) == hash;
 }
 
-void main() async {
+late final Handler handler;
+
+Future<HttpServer> createServer() async {
+  final preferredPorts = [8080, 8081, 8082, 3000, 3001];
+  
+  for (final port in preferredPorts) {
+    try {
+      final server = await serve(
+        handler, 
+        InternetAddress.anyIPv4, 
+        port
+      );
+      print('Server running on http://${server.address.host}:${server.port}');
+      return server;
+    } catch (e) {
+      print('Port $port is in use, trying next port...');
+      continue;
+    }
+  }
+  throw 'Unable to start server on any of the preferred ports';
+}
+
+Future<void> main() async {
   PostgreSQLConnection db;
 
   try {
@@ -104,41 +126,27 @@ void main() async {
 
   // Login user
   router.post('/auth/login', (Request req) async {
-    try {
-      final payload = await req.readAsString();
-      final data = jsonDecode(payload);
-
-      // Validate input
-      if (data['email'] == null || data['password'] == null) {
-        return Response(400, 
-          body: jsonEncode({
-            'success': false,
-            'error': 'Email and password are required'
-          }),
-          headers: {'Content-Type': 'application/json'}
-        );
-      }
-
-      final email = data['email'];
-      final password = data['password'];
-
-      final results = await db.mappedResultsQuery(
-        'SELECT * FROM users WHERE email = @e',
-        substitutionValues: {'e': email}
+  try {
+    final payload = await req.readAsString();
+    print('Login attempt with payload: $payload'); // Debug log
+    
+    final data = jsonDecode(payload);
+    if (data['email'] == null || data['password'] == null) {
+      return Response(400, 
+        body: jsonEncode({
+          'success': false,
+          'error': 'Email and password are required'
+        }),
+        headers: {'Content-Type': 'application/json'}
       );
+    }
 
-      if (results.isEmpty) {
-        return Response(401,
-          body: jsonEncode({
-            'success': false,
-            'error': 'Invalid email or password'
-          }),
-          headers: {'Content-Type': 'application/json'}
-        );
-      }
+    final results = await db.mappedResultsQuery(
+      'SELECT * FROM users WHERE email = @e',
+      substitutionValues: {'e': data['email']}
+    );
 
-    var user = results.first['users'];
-    if (!verifyPassword(password, user?['password'])) {
+    if (results.isEmpty) {
       return Response(401,
         body: jsonEncode({
           'success': false,
@@ -147,15 +155,23 @@ void main() async {
         headers: {'Content-Type': 'application/json'}
       );
     }
-    // Generate token after successful password verification
-    final token = generateToken(user?['id']);
-    // Add token to user data
-    user?['token'] = token;
-    // Convert DateTime fields to string
-    user = _convertDateTimes(user ?? {});
 
-    // Remove sensitive data
+    var user = results.first['users'];
+    if (!verifyPassword(data['password'], user?['password'])) {
+      return Response(401,
+        body: jsonEncode({
+          'success': false,
+          'error': 'Invalid email or password'
+        }),
+        headers: {'Content-Type': 'application/json'}
+      );
+    }
+
+    final token = generateToken(user?['id']);
+    user = _convertDateTimes(user ?? {});
     user?.remove('password');
+    
+    print('Login successful for user: ${user?['email']}'); // Debug log
     
     return Response.ok(
       jsonEncode({
@@ -165,17 +181,17 @@ void main() async {
       }),
       headers: {'Content-Type': 'application/json'}
     );
-    } catch (e) {
-      print('Login error: $e');
-      return Response.internalServerError(
-        body: jsonEncode({
-          'success': false,
-          'error': 'An unexpected error occurred'
-        }),
-        headers: {'Content-Type': 'application/json'}
-      );
-    }
-  });
+  } catch (e) {
+    print('Login error: $e'); // Debug log
+    return Response.internalServerError(
+      body: jsonEncode({
+        'success': false,
+        'error': 'An unexpected error occurred'
+      }),
+      headers: {'Content-Type': 'application/json'}
+    );
+  }
+});
   router.post('/auth/verify', (Request req) async {
   final authHeader = req.headers['authorization'];
   if (authHeader == null || !authHeader.startsWith('Bearer ')) {
@@ -224,8 +240,6 @@ void main() async {
     };
   };
 }
-  // Middleware to verify authentication
-  router.all('/users/<ignored|.*>', verifyAuth());
 
   // Get all properties (returns JSON)
   router.post('/properties', (Request req) async {
@@ -297,10 +311,6 @@ void main() async {
       return Response.badRequest(body: jsonEncode({'error': 'Missing required fields: title, type, location'}), headers: {'Content-Type': 'application/json'});
     }
 
-    router.all('/<ignored|.*>', (Request req) {
-  return Response.notFound(jsonEncode({'error': 'Route not found: ${req.url}'}), headers: {'Content-Type': 'application/json'});
-  });
-
     final id = await db.query(
       'INSERT INTO properties (title, type, location) VALUES (@title, @type, @location) RETURNING id',
       substitutionValues: {
@@ -313,39 +323,55 @@ void main() async {
     return Response.ok(jsonEncode({'success': true, 'id': id.first[0]}), headers: {'Content-Type': 'application/json'});
   });
 
+  // Catch-all route for undefined endpoints
+  router.all('/<ignored|.*>', (Request req) {
+    return Response.notFound(jsonEncode({'error': 'Route not found: ${req.url}'}), headers: {'Content-Type': 'application/json'});
+  });
+
   Response _cors(Response response) => response.change(
-  headers: {
-    ...response.headers,
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-    'Access-Control-Allow-Headers': 'Origin, Content-Type, Accept, Authorization',
-  },
-);
+    headers: {
+      ...response.headers,
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+      'Access-Control-Allow-Headers': 'Origin, Content-Type, Accept, Authorization',
+    },
+  );
 
-bool _isProtectedRoute(String path) {
-  final publicRoutes = [
-    '/auth/login',
-    '/auth/register',
-    '/',
-  ];
-  return !publicRoutes.contains(path);
-}
+  bool _isProtectedRoute(String path, String method) {
+    final publicRoutes = [
+      '/auth/login',
+      '/auth/register',
+      '/auth/verify',
+      '/users',  // Add this
+      '/'
+    ];
+    // Check if the exact path matches any public route
+    if (publicRoutes.contains(path)) {
+      return false;
+    }
+    // Check if it's a registration request
+    if (path == '/users' && method == 'POST') {
+      return false;
+    }
+    return true;
+  }
 
-final handler = Pipeline()
-    .addMiddleware(logRequests())
-    .addMiddleware((innerHandler) {
-      return (request) async {
-        if (request.method == 'OPTIONS') {
-          return _cors(Response.ok(''));
-        }
-        
-        // Add authentication for protected routes
-        if (_isProtectedRoute(request.url.path)) {
-          final response = await verifyAuth()(innerHandler)(request);
+  handler = Pipeline()
+      .addMiddleware(logRequests())
+      .addMiddleware((innerHandler) {
+        return (request) async {
+          if (request.method == 'OPTIONS') {
+            return _cors(Response.ok(''));
+          }
+          print('Processing ${request.method} ${request.url.path}'); // Debug log
+          // Add authentication for protected routes
+          if (!_isProtectedRoute(request.url.path, request.method)) {
+          final response = await innerHandler(request);
           return _cors(response);
         }
-        
-        final response = await innerHandler(request);
+          
+          // Verify auth for protected routes
+        final response = await verifyAuth()(innerHandler)(request);
         return _cors(response);
       };
     })
