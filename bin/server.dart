@@ -164,34 +164,28 @@ void main() async {
   });
 
   // Get user by email
-  router.get('/users/email/:email', (Request req, String email) async {
-    try {
-      final results = await db.query(
-        '''SELECT id, email, first_name, last_name, phone_number, whatsapp_link, 
-           avatar_url, created_at, last_login, account_status 
-           FROM users WHERE email = @email''',
-        substitutionValues: {'email': email},
-      );
+  
+// Get user by email
+  router.get('/users/<email>', (Request req, String email) async {
+    final results = await db.mappedResultsQuery(
+      '''SELECT id, email, first_name, last_name, phone_number, whatsapp_link, 
+        avatar_url, created_at, last_login, account_status 
+        FROM users WHERE email = @email''',
+      substitutionValues: {'email': email},
+    );
 
-      if (results.isEmpty) {
-        return Response.notFound(
-          jsonEncode({'error': 'User not found'}),
-          headers: {'Content-Type': 'application/json'}
-        );
-      }
-
-      final user = results.first.toColumnMap();
-      return Response.ok(
-        jsonEncode({'success': true, 'user': user}),
-        headers: {'Content-Type': 'application/json'}
-      );
-    } catch (e) {
-      print('Get user by email error: $e');
-      return Response.internalServerError(
-        body: jsonEncode({'success': false, 'error': 'Database error'}),
-        headers: {'Content-Type': 'application/json'}
+    if (results.isEmpty) {
+      return Response.notFound(
+        jsonEncode({'error': 'User not found'}),
+        headers: {'Content-Type': 'application/json'},
       );
     }
+
+    final user = results.first['users'] ?? {};
+    return Response.ok(
+      jsonEncode(user),
+      headers: {'Content-Type': 'application/json'},
+    );
   });
 
   // Get user by ID
