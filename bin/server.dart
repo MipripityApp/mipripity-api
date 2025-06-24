@@ -156,6 +156,238 @@ void main() async {
     }
   });
 
+  // Get all users (admin endpoint)
+  router.get('/users', (Request req) async {
+    final results = await db.query('SELECT id, email, first_name, last_name, phone_number, whatsapp_link, avatar_url, account_status, created_at, last_login FROM users');
+    final users = results.map((row) => row.toColumnMap()).toList();
+    return Response.ok(jsonEncode(users), headers: {'Content-Type': 'application/json'});
+  });
+
+  // Get user by email
+  router.get('/users/email/:email', (Request req, String email) async {
+    try {
+      final results = await db.query(
+        '''SELECT id, email, first_name, last_name, phone_number, whatsapp_link, 
+           avatar_url, created_at, last_login, account_status 
+           FROM users WHERE email = @email''',
+        substitutionValues: {'email': email},
+      );
+
+      if (results.isEmpty) {
+        return Response.notFound(
+          jsonEncode({'error': 'User not found'}),
+          headers: {'Content-Type': 'application/json'}
+        );
+      }
+
+      final user = results.first.toColumnMap();
+      return Response.ok(
+        jsonEncode({'success': true, 'user': user}),
+        headers: {'Content-Type': 'application/json'}
+      );
+    } catch (e) {
+      print('Get user by email error: $e');
+      return Response.internalServerError(
+        body: jsonEncode({'success': false, 'error': 'Database error'}),
+        headers: {'Content-Type': 'application/json'}
+      );
+    }
+  });
+
+  // Get user by ID
+  router.get('/users/:id', (Request req, String id) async {
+    try {
+      final results = await db.query(
+        '''SELECT id, email, first_name, last_name, phone_number, whatsapp_link, 
+           avatar_url, created_at, last_login, account_status 
+           FROM users WHERE id = @id''',
+        substitutionValues: {'id': int.parse(id)},
+      );
+
+      if (results.isEmpty) {
+        return Response.notFound(
+          jsonEncode({'error': 'User not found'}),
+          headers: {'Content-Type': 'application/json'}
+        );
+      }
+
+      final user = results.first.toColumnMap();
+      return Response.ok(
+        jsonEncode({'success': true, 'user': user}),
+        headers: {'Content-Type': 'application/json'}
+      );
+    } catch (e) {
+      print('Get user by ID error: $e');
+      return Response.internalServerError(
+        body: jsonEncode({'success': false, 'error': 'Database error'}),
+        headers: {'Content-Type': 'application/json'}
+      );
+    }
+  });
+
+  // 1. Get user settings
+  router.get('/users/:id/settings', (Request req, String id) async {
+    try {
+      final userId = int.parse(id);
+      
+      final results = await db.query(
+        'SELECT * FROM user_settings WHERE user_id = @user_id',
+        substitutionValues: {'user_id': userId},
+      );
+
+      if (results.isEmpty) {
+        // Create default settings if none exist
+        await db.query(
+          'INSERT INTO user_settings (user_id) VALUES (@user_id)',
+          substitutionValues: {'user_id': userId},
+        );
+        
+        // Fetch the newly created settings
+        final newResults = await db.query(
+          'SELECT * FROM user_settings WHERE user_id = @user_id',
+          substitutionValues: {'user_id': userId},
+        );
+        
+        final settings = newResults.first.toColumnMap();
+        return Response.ok(
+          jsonEncode({'success': true, 'settings': settings}),
+          headers: {'Content-Type': 'application/json'}
+        );
+      }
+
+      final settings = results.first.toColumnMap();
+      return Response.ok(
+        jsonEncode({'success': true, 'settings': settings}),
+        headers: {'Content-Type': 'application/json'}
+      );
+    } catch (e) {
+      print('Get user settings error: $e');
+      return Response.internalServerError(
+        body: jsonEncode({'success': false, 'error': e.toString()}),
+        headers: {'Content-Type': 'application/json'}
+      );
+    }
+  });
+
+  // 2. Update user settings
+  router.put('/users/:id/settings', (Request req, String id) async {
+    try {
+      final userId = int.parse(id);
+      final payload = await req.readAsString();
+      final data = jsonDecode(payload);
+
+      // Build dynamic update query based on provided fields
+      final updateFields = <String>[];
+      final substitutionValues = <String, dynamic>{'user_id': userId};
+
+      // Notification preferences
+      if (data.containsKey('push_notifications')) {
+        updateFields.add('push_notifications = @push_notifications');
+        substitutionValues['push_notifications'] = data['push_notifications'];
+      }
+      if (data.containsKey('email_notifications')) {
+        updateFields.add('email_notifications = @email_notifications');
+        substitutionValues['email_notifications'] = data['email_notifications'];
+      }
+      if (data.containsKey('sms_notifications')) {
+        updateFields.add('sms_notifications = @sms_notifications');
+        substitutionValues['sms_notifications'] = data['sms_notifications'];
+      }
+      if (data.containsKey('in_app_notifications')) {
+        updateFields.add('in_app_notifications = @in_app_notifications');
+        substitutionValues['in_app_notifications'] = data['in_app_notifications'];
+      }
+
+      // App preferences
+      if (data.containsKey('theme_preference')) {
+        updateFields.add('theme_preference = @theme_preference');
+        substitutionValues['theme_preference'] = data['theme_preference'];
+      }
+      if (data.containsKey('language_preference')) {
+        updateFields.add('language_preference = @language_preference');
+        substitutionValues['language_preference'] = data['language_preference'];
+      }
+      if (data.containsKey('currency_preference')) {
+        updateFields.add('currency_preference = @currency_preference');
+        substitutionValues['currency_preference'] = data['currency_preference'];
+      }
+      if (data.containsKey('distance_unit')) {
+        updateFields.add('distance_unit = @distance_unit');
+        substitutionValues['distance_unit'] = data['distance_unit'];
+      }
+      if (data.containsKey('date_format')) {
+        updateFields.add('date_format = @date_format');
+        substitutionValues['date_format'] = data['date_format'];
+      }
+
+      // Security settings
+      if (data.containsKey('two_factor_auth')) {
+        updateFields.add('two_factor_auth = @two_factor_auth');
+        substitutionValues['two_factor_auth'] = data['two_factor_auth'];
+      }
+      if (data.containsKey('biometric_auth')) {
+        updateFields.add('biometric_auth = @biometric_auth');
+        substitutionValues['biometric_auth'] = data['biometric_auth'];
+      }
+      if (data.containsKey('location_tracking')) {
+        updateFields.add('location_tracking = @location_tracking');
+        substitutionValues['location_tracking'] = data['location_tracking'];
+      }
+
+      // Privacy settings
+      if (data.containsKey('profile_visibility')) {
+        updateFields.add('profile_visibility = @profile_visibility');
+        substitutionValues['profile_visibility'] = data['profile_visibility'];
+      }
+      if (data.containsKey('show_email')) {
+        updateFields.add('show_email = @show_email');
+        substitutionValues['show_email'] = data['show_email'];
+      }
+      if (data.containsKey('show_phone')) {
+        updateFields.add('show_phone = @show_phone');
+        substitutionValues['show_phone'] = data['show_phone'];
+      }
+
+      if (updateFields.isEmpty) {
+        return Response.badRequest(
+          body: jsonEncode({'success': false, 'error': 'No valid fields to update'}),
+          headers: {'Content-Type': 'application/json'}
+        );
+      }
+
+      // Add updated_at timestamp
+      updateFields.add('updated_at = CURRENT_TIMESTAMP');
+
+      final query = '''
+        UPDATE user_settings 
+        SET ${updateFields.join(', ')} 
+        WHERE user_id = @user_id
+        RETURNING *
+      ''';
+
+      final results = await db.query(query, substitutionValues: substitutionValues);
+
+      if (results.isEmpty) {
+        return Response.notFound(
+          jsonEncode({'success': false, 'error': 'User settings not found'}),
+          headers: {'Content-Type': 'application/json'}
+        );
+      }
+
+      final updatedSettings = results.first.toColumnMap();
+      return Response.ok(
+        jsonEncode({'success': true, 'settings': updatedSettings}),
+        headers: {'Content-Type': 'application/json'}
+      );
+    } catch (e) {
+      print('Update user settings error: $e');
+      return Response.internalServerError(
+        body: jsonEncode({'success': false, 'error': e.toString()}),
+        headers: {'Content-Type': 'application/json'}
+      );
+    }
+  });
+
   // Get all properties (returns JSON)
   router.post('/properties', (Request req) async {
     final payload = await req.readAsString();
@@ -269,6 +501,16 @@ void main() async {
     'Access-Control-Allow-Headers': 'Origin, Content-Type, Accept, Authorization',
   },
 );
+
+  // CORS middleware
+  router.all('/<ignored|.*>', (Request req) {
+    if (req.method == 'OPTIONS') {
+      return _cors(Response.ok(''));
+    }
+    return null; // Let the request continue to the next handler
+  });
+
+  // Create the handler pipeline
 
 final handler = Pipeline()
     .addMiddleware(logRequests())
