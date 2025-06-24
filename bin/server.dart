@@ -164,8 +164,6 @@ void main() async {
   });
 
   // Get user by email
-  
-// Get user by email
   router.get('/users/<email>', (Request req, String email) async {
     final results = await db.mappedResultsQuery(
       '''SELECT id, email, first_name, last_name, phone_number, whatsapp_link, 
@@ -181,7 +179,7 @@ void main() async {
       );
     }
 
-    final user = results.first['users'] ?? {};
+    final user = _convertDateTimes(results.first['users'] ?? {});
     return Response.ok(
       jsonEncode(user),
       headers: {'Content-Type': 'application/json'},
