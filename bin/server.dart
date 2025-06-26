@@ -187,9 +187,9 @@ void main() async {
   });
 
   // Get user by ID
-  router.get('/users/:id', (Request req, String id) async {
+  router.get('/users/<id>', (Request req, String id) async {
     try {
-      final results = await db.query(
+      final results = await db.mappedResultsQuery(
         '''SELECT id, email, first_name, last_name, phone_number, whatsapp_link, 
            avatar_url, created_at, last_login, account_status 
            FROM users WHERE id = @id''',
@@ -203,15 +203,15 @@ void main() async {
         );
       }
 
-      final user = results.first.toColumnMap();
-      return Response.ok(
-        jsonEncode({'success': true, 'user': user}),
-        headers: {'Content-Type': 'application/json'}
-      );
+      final user = _convertDateTimes(results.first['users'] ?? {});
+    return Response.ok(
+      jsonEncode(user),
+      headers: {'Content-Type': 'application/json'},
+    );
     } catch (e) {
       print('Get user by ID error: $e');
       return Response.internalServerError(
-        body: jsonEncode({'success': false, 'error': 'Database error'}),
+        body: jsonEncode({'error': 'Invalid user ID format'}),
         headers: {'Content-Type': 'application/json'}
       );
     }
