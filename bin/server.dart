@@ -29,7 +29,7 @@ void main() async {
   final router = Router();
 
   router.get('/', (Request req) async {
-  return Response.ok('Mipripity API is running');
+    return Response.ok('Mipripity API is running');
   });
   
   // Helper to convert DateTime fields to string
@@ -45,16 +45,14 @@ void main() async {
     return result;
   }
 
-  // Register user
+  // Get all users (admin endpoint)
   router.get('/users', (Request req) async {
-  final results = await db.mappedResultsQuery('SELECT * FROM users');
-  final users = results.map((row) => _convertDateTimes(row['users'] ?? {})).toList();
-  // Remove password from each user
-  for (final user in users) {
-    user.remove('password');
-  }
-  return Response.ok(jsonEncode(users), headers: {'Content-Type': 'application/json'});
+    final results = await db.query('SELECT id, email, first_name, last_name, phone_number, whatsapp_link, avatar_url, account_status, created_at, last_login FROM users');
+    final users = results.map((row) => row.toColumnMap()).toList();
+    return Response.ok(jsonEncode(users), headers: {'Content-Type': 'application/json'});
   });
+
+  // Register user
   router.post('/users', (Request req) async {
     final payload = await req.readAsString();
     final data = jsonDecode(payload);
@@ -156,15 +154,40 @@ void main() async {
     }
   });
 
-  // Get all users (admin endpoint)
-  router.get('/users', (Request req) async {
-    final results = await db.query('SELECT id, email, first_name, last_name, phone_number, whatsapp_link, avatar_url, account_status, created_at, last_login FROM users');
-    final users = results.map((row) => row.toColumnMap()).toList();
-    return Response.ok(jsonEncode(users), headers: {'Content-Type': 'application/json'});
+  // Get user by ID - FIXED: More specific route pattern
+  router.get('/users/id/<id>', (Request req, String id) async {
+    try {
+      final userId = int.parse(id);
+      final results = await db.mappedResultsQuery(
+        '''SELECT id, email, first_name, last_name, phone_number, whatsapp_link, 
+           avatar_url, created_at, last_login, account_status 
+           FROM users WHERE id = @id''',
+        substitutionValues: {'id': userId},
+      );
+
+      if (results.isEmpty) {
+        return Response.notFound(
+          jsonEncode({'error': 'User not found'}),
+          headers: {'Content-Type': 'application/json'}
+        );
+      }
+
+      final user = _convertDateTimes(results.first['users'] ?? {});
+      return Response.ok(
+        jsonEncode(user),
+        headers: {'Content-Type': 'application/json'},
+      );
+    } catch (e) {
+      print('Get user by ID error: $e');
+      return Response.internalServerError(
+        body: jsonEncode({'error': 'Invalid user ID format'}),
+        headers: {'Content-Type': 'application/json'}
+      );
+    }
   });
 
-  // Get user by email
-  router.get('/users/<email>', (Request req, String email) async {
+  // Get user by email - FIXED: More specific route pattern
+  router.get('/users/email/<email>', (Request req, String email) async {
     final results = await db.mappedResultsQuery(
       '''SELECT id, email, first_name, last_name, phone_number, whatsapp_link, 
         avatar_url, created_at, last_login, account_status 
@@ -186,39 +209,8 @@ void main() async {
     );
   });
 
-  // Get user by ID
-  router.get('/users/<id>', (Request req, String id) async {
-    try {
-      final results = await db.mappedResultsQuery(
-        '''SELECT id, email, first_name, last_name, phone_number, whatsapp_link, 
-           avatar_url, created_at, last_login, account_status 
-           FROM users WHERE id = @id''',
-        substitutionValues: {'id': int.parse(id)},
-      );
-
-      if (results.isEmpty) {
-        return Response.notFound(
-          jsonEncode({'error': 'User not found'}),
-          headers: {'Content-Type': 'application/json'}
-        );
-      }
-
-      final user = _convertDateTimes(results.first['users'] ?? {});
-    return Response.ok(
-      jsonEncode(user),
-      headers: {'Content-Type': 'application/json'},
-    );
-    } catch (e) {
-      print('Get user by ID error: $e');
-      return Response.internalServerError(
-        body: jsonEncode({'error': 'Invalid user ID format'}),
-        headers: {'Content-Type': 'application/json'}
-      );
-    }
-  });
-
   // 1. Get user settings
-  router.get('/users/:id/settings', (Request req, String id) async {
+  router.get('/users/<id>/settings', (Request req, String id) async {
     try {
       final userId = int.parse(id);
       
@@ -262,7 +254,7 @@ void main() async {
   });
 
   // 2. Update user settings
-  router.put('/users/:id/settings', (Request req, String id) async {
+  router.put('/users/<id>/settings', (Request req, String id) async {
     try {
       final userId = int.parse(id);
       final payload = await req.readAsString();
@@ -381,11 +373,18 @@ void main() async {
   });
 
   // Get all properties (returns JSON)
+  router.get('/properties', (Request req) async {
+    final results = await db.mappedResultsQuery('SELECT * FROM properties');
+    final properties = results.map((row) => _convertDateTimes(row['properties'] ?? {})).toList();
+    return Response.ok(jsonEncode(properties), headers: {'Content-Type': 'application/json'});
+  });
+
+  // Create property
   router.post('/properties', (Request req) async {
     final payload = await req.readAsString();
     final data = Map<String, dynamic>.from(jsonDecode(payload));
 
-    // Validate required fields (update as needed)
+    // Validate required fields
     if (!data.containsKey('title') || !data.containsKey('type') || !data.containsKey('location')) {
       return Response.badRequest(body: jsonEncode({'error': 'Missing required fields: title, type, location'}), headers: {'Content-Type': 'application/json'});
     }
@@ -401,121 +400,88 @@ void main() async {
 
     return Response.ok(jsonEncode({'success': true, 'id': id.first[0]}), headers: {'Content-Type': 'application/json'});
   });
-  router.get('/properties', (Request req) async {
-  final results = await db.mappedResultsQuery('SELECT * FROM properties');
-  final properties = results.map((row) => _convertDateTimes(row['properties'] ?? {})).toList();
-  return Response.ok(jsonEncode(properties), headers: {'Content-Type': 'application/json'});
-  });
 
   router.get('/properties/residential', (Request req) async {
-  final results = await db.mappedResultsQuery("SELECT * FROM properties WHERE type = 'residential'");
-  final properties = results.map((row) => _convertDateTimes(row['properties'] ?? {})).toList();
-  return Response.ok(jsonEncode(properties), headers: {'Content-Type': 'application/json'});
+    final results = await db.mappedResultsQuery("SELECT * FROM properties WHERE type = 'residential'");
+    final properties = results.map((row) => _convertDateTimes(row['properties'] ?? {})).toList();
+    return Response.ok(jsonEncode(properties), headers: {'Content-Type': 'application/json'});
   });
 
   router.get('/properties/commercial', (Request req) async {
-  final results = await db.mappedResultsQuery("SELECT * FROM properties WHERE type = 'commercial'");
-  final properties = results.map((row) => _convertDateTimes(row['properties'] ?? {})).toList();
-  return Response.ok(jsonEncode(properties), headers: {'Content-Type': 'application/json'});
+    final results = await db.mappedResultsQuery("SELECT * FROM properties WHERE type = 'commercial'");
+    final properties = results.map((row) => _convertDateTimes(row['properties'] ?? {})).toList();
+    return Response.ok(jsonEncode(properties), headers: {'Content-Type': 'application/json'});
   });
 
   router.get('/properties/land', (Request req) async {
-  final results = await db.mappedResultsQuery("SELECT * FROM properties WHERE type = 'land'");
-  final properties = results.map((row) => _convertDateTimes(row['properties'] ?? {})).toList();
-  return Response.ok(jsonEncode(properties), headers: {'Content-Type': 'application/json'});
+    final results = await db.mappedResultsQuery("SELECT * FROM properties WHERE type = 'land'");
+    final properties = results.map((row) => _convertDateTimes(row['properties'] ?? {})).toList();
+    return Response.ok(jsonEncode(properties), headers: {'Content-Type': 'application/json'});
   });
 
   router.get('/properties/material', (Request req) async {
-  final results = await db.mappedResultsQuery("SELECT * FROM properties WHERE type = 'material'");
-  final properties = results.map((row) => _convertDateTimes(row['properties'] ?? {})).toList();
-  return Response.ok(jsonEncode(properties), headers: {'Content-Type': 'application/json'});
+    final results = await db.mappedResultsQuery("SELECT * FROM properties WHERE type = 'material'");
+    final properties = results.map((row) => _convertDateTimes(row['properties'] ?? {})).toList();
+    return Response.ok(jsonEncode(properties), headers: {'Content-Type': 'application/json'});
   });
 
   // GET /properties/property_id
   router.get('/properties/<id>', (Request req, String id) async {
-  List<Map<String, Map<String, dynamic>>> results = [];
-  // Try integer id first
-  try {
-    results = await db.mappedResultsQuery(
-      'SELECT * FROM properties WHERE id = @id',
-      substitutionValues: {'id': int.parse(id)},
-    );
-  } catch (_) {
-    // If not integer, try property_id
-    results = await db.mappedResultsQuery(
-      'SELECT * FROM properties WHERE property_id = @property_id',
-      substitutionValues: {'property_id': id},
-    );
-  }
-  if (results.isEmpty) {
-    return Response.notFound(
-      jsonEncode({'error': 'Property not found'}),
+    List<Map<String, Map<String, dynamic>>> results = [];
+    // Try integer id first
+    try {
+      results = await db.mappedResultsQuery(
+        'SELECT * FROM properties WHERE id = @id',
+        substitutionValues: {'id': int.parse(id)},
+      );
+    } catch (_) {
+      // If not integer, try property_id
+      results = await db.mappedResultsQuery(
+        'SELECT * FROM properties WHERE property_id = @property_id',
+        substitutionValues: {'property_id': id},
+      );
+    }
+    if (results.isEmpty) {
+      return Response.notFound(
+        jsonEncode({'error': 'Property not found'}),
+        headers: {'Content-Type': 'application/json'},
+      );
+    }
+    final property = _convertDateTimes(results.first['properties'] ?? {});
+    return Response.ok(
+      jsonEncode(property),
       headers: {'Content-Type': 'application/json'},
     );
-  }
-  final property = _convertDateTimes(results.first['properties'] ?? {});
-  return Response.ok(
-    jsonEncode(property),
-    headers: {'Content-Type': 'application/json'},
-  );
-});
-
-  router.post('/properties', (Request req) async {
-    final payload = await req.readAsString();
-    final data = Map<String, dynamic>.from(jsonDecode(payload));
-
-    // Validate required fields (update as needed)
-    if (!data.containsKey('title') || !data.containsKey('type') || !data.containsKey('location')) {
-      return Response.badRequest(body: jsonEncode({'error': 'Missing required fields: title, type, location'}), headers: {'Content-Type': 'application/json'});
-    }
-
-    router.all('/<ignored|.*>', (Request req) {
-  return Response.notFound(jsonEncode({'error': 'Route not found: ${req.url}'}), headers: {'Content-Type': 'application/json'});
   });
 
-    final id = await db.query(
-      'INSERT INTO properties (title, type, location) VALUES (@title, @type, @location) RETURNING id',
-      substitutionValues: {
-        'title': data['title'],
-        'type': data['type'],
-        'location': data['location'],
-      },
-    );
-
-    return Response.ok(jsonEncode({'success': true, 'id': id.first[0]}), headers: {'Content-Type': 'application/json'});
-  });
-
+  // CORS helper function
   Response _cors(Response response) => response.change(
-  headers: {
-    ...response.headers,
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-    'Access-Control-Allow-Headers': 'Origin, Content-Type, Accept, Authorization',
-  },
-);
+    headers: {
+      ...response.headers,
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+      'Access-Control-Allow-Headers': 'Origin, Content-Type, Accept, Authorization',
+    },
+  );
 
-  // CORS middleware
+  // Handle 404 routes
   router.all('/<ignored|.*>', (Request req) {
-    if (req.method == 'OPTIONS') {
-      return _cors(Response.ok(''));
-    }
-    return null; // Let the request continue to the next handler
+    return Response.notFound(jsonEncode({'error': 'Route not found: ${req.url}'}), headers: {'Content-Type': 'application/json'});
   });
 
   // Create the handler pipeline
-
-final handler = Pipeline()
-    .addMiddleware(logRequests())
-    .addMiddleware((innerHandler) {
-      return (request) async {
-        if (request.method == 'OPTIONS') {
-          return _cors(Response.ok(''));
-        }
-        final response = await innerHandler(request);
-        return _cors(response);
-      };
-    })
-    .addHandler(router);
+  final handler = Pipeline()
+      .addMiddleware(logRequests())
+      .addMiddleware((innerHandler) {
+        return (request) async {
+          if (request.method == 'OPTIONS') {
+            return _cors(Response.ok(''));
+          }
+          final response = await innerHandler(request);
+          return _cors(response);
+        };
+      })
+      .addHandler(router);
 
   final port = int.parse(Platform.environment['PORT'] ?? '8080');
   final server = await serve(handler, InternetAddress.anyIPv4, port);
