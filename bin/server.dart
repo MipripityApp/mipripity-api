@@ -48,7 +48,7 @@ void main() async {
   // Get all users (admin endpoint)
   router.get('/users', (Request req) async {
     final results = await db.query('SELECT id, email, first_name, last_name, phone_number, whatsapp_link, avatar_url, account_status, created_at, last_login FROM users');
-    final users = results.map((row) => row.toColumnMap()).toList();
+    final users = results.map((row) => _convertDateTimes(row.toColumnMap())).toList();
     return Response.ok(jsonEncode(users), headers: {'Content-Type': 'application/json'});
   });
 
