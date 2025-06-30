@@ -5,6 +5,7 @@ import 'package:shelf/shelf_io.dart';
 import 'package:shelf_router/shelf_router.dart';
 import 'package:postgres/postgres.dart';
 import 'package:mipripity_api/database_helper.dart';
+import 'package:mipripity_api/cac_verification.dart'; // Import CAC verification handler
 import 'package:crypto/crypto.dart';
 
 String hashPassword(String password) {
@@ -458,6 +459,33 @@ router.put('/users/id/<id>/settings', (Request req, String id) async {
       'Access-Control-Allow-Headers': 'Origin, Content-Type, Accept, Authorization',
     },
   );
+
+  // CAC agency verification endpoint
+  router.post('/verify-agency', CacVerificationHandler.handleVerifyAgency);
+
+  // Update the database schema to include new agency verification fields
+  try {
+    // Check if rc_number and official_agency_name columns already exist
+    final columnsExist = await db.mappedResultsQuery("""
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'users' 
+        AND column_name IN ('rc_number', 'official_agency_name')
+    """);
+    
+    if (columnsExist.isEmpty) {
+      // Add the new columns to store CAC verification data
+      await db.execute("""
+        ALTER TABLE users 
+        ADD COLUMN IF NOT EXISTS rc_number VARCHAR(50),
+        ADD COLUMN IF NOT EXISTS official_agency_name VARCHAR(255)
+      """);
+      print('Added CAC verification columns to users table');
+    }
+  } catch (e) {
+    print('Error updating database schema: $e');
+    // Continue anyway, as this is not critical for the API to function
+  }
 
   // Handle 404 routes
   router.all('/<ignored|.*>', (Request req) {
