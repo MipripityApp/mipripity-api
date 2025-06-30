@@ -209,12 +209,12 @@ void main() async {
     );
   });
 
-  // 1. Get user settings
-  router.get('/users/<id>/settings', (Request req, String id) async {
+  // Get user settings
+  router.get('/users/id/<id>/settings', (Request req, String id) async {
     try {
       final userId = int.parse(id);
       
-      final results = await db.query(
+      final results = await db.mappedResultsQuery(
         'SELECT * FROM user_settings WHERE user_id = @user_id',
         substitutionValues: {'user_id': userId},
       );
@@ -226,20 +226,27 @@ void main() async {
           substitutionValues: {'user_id': userId},
         );
         
-        // Fetch the newly created settings
-        final newResults = await db.query(
+        // Fetch the newly created settings using mappedResultsQuery
+        final newResults = await db.mappedResultsQuery(
           'SELECT * FROM user_settings WHERE user_id = @user_id',
           substitutionValues: {'user_id': userId},
         );
         
-        final settings = newResults.first.toColumnMap();
+        if (newResults.isEmpty) {
+          return Response.internalServerError(
+            body: jsonEncode({'error': 'Failed to create default settings'}),
+            headers: {'Content-Type': 'application/json'}
+          );
+        }
+        
+        final settings = _convertDateTimes(newResults.first['user_settings'] ?? {});
         return Response.ok(
           jsonEncode({'success': true, 'settings': settings}),
           headers: {'Content-Type': 'application/json'}
         );
       }
 
-      final settings = results.first.toColumnMap();
+      final settings = _convertDateTimes(results.first['user_settings'] ?? {});
       return Response.ok(
         jsonEncode({'success': true, 'settings': settings}),
         headers: {'Content-Type': 'application/json'}
@@ -247,130 +254,118 @@ void main() async {
     } catch (e) {
       print('Get user settings error: $e');
       return Response.internalServerError(
-        body: jsonEncode({'success': false, 'error': e.toString()}),
+        body: jsonEncode({'error': 'Invalid user ID format or database error'}),
         headers: {'Content-Type': 'application/json'}
       );
     }
   });
 
-  // 2. Update user settings
-  router.put('/users/<id>/settings', (Request req, String id) async {
-    try {
-      final userId = int.parse(id);
-      final payload = await req.readAsString();
-      final data = jsonDecode(payload);
+  // Update user settings
+router.put('/users/id/<id>/settings', (Request req, String id) async {
+  try {
+    final userId = int.parse(id);
+    final payload = await req.readAsString();
+    final data = jsonDecode(payload) as Map<String, dynamic>;
 
-      // Build dynamic update query based on provided fields
-      final updateFields = <String>[];
-      final substitutionValues = <String, dynamic>{'user_id': userId};
-
-      // Notification preferences
-      if (data.containsKey('push_notifications')) {
-        updateFields.add('push_notifications = @push_notifications');
-        substitutionValues['push_notifications'] = data['push_notifications'];
-      }
-      if (data.containsKey('email_notifications')) {
-        updateFields.add('email_notifications = @email_notifications');
-        substitutionValues['email_notifications'] = data['email_notifications'];
-      }
-      if (data.containsKey('sms_notifications')) {
-        updateFields.add('sms_notifications = @sms_notifications');
-        substitutionValues['sms_notifications'] = data['sms_notifications'];
-      }
-      if (data.containsKey('in_app_notifications')) {
-        updateFields.add('in_app_notifications = @in_app_notifications');
-        substitutionValues['in_app_notifications'] = data['in_app_notifications'];
-      }
-
-      // App preferences
-      if (data.containsKey('theme_preference')) {
-        updateFields.add('theme_preference = @theme_preference');
-        substitutionValues['theme_preference'] = data['theme_preference'];
-      }
-      if (data.containsKey('language_preference')) {
-        updateFields.add('language_preference = @language_preference');
-        substitutionValues['language_preference'] = data['language_preference'];
-      }
-      if (data.containsKey('currency_preference')) {
-        updateFields.add('currency_preference = @currency_preference');
-        substitutionValues['currency_preference'] = data['currency_preference'];
-      }
-      if (data.containsKey('distance_unit')) {
-        updateFields.add('distance_unit = @distance_unit');
-        substitutionValues['distance_unit'] = data['distance_unit'];
-      }
-      if (data.containsKey('date_format')) {
-        updateFields.add('date_format = @date_format');
-        substitutionValues['date_format'] = data['date_format'];
-      }
-
-      // Security settings
-      if (data.containsKey('two_factor_auth')) {
-        updateFields.add('two_factor_auth = @two_factor_auth');
-        substitutionValues['two_factor_auth'] = data['two_factor_auth'];
-      }
-      if (data.containsKey('biometric_auth')) {
-        updateFields.add('biometric_auth = @biometric_auth');
-        substitutionValues['biometric_auth'] = data['biometric_auth'];
-      }
-      if (data.containsKey('location_tracking')) {
-        updateFields.add('location_tracking = @location_tracking');
-        substitutionValues['location_tracking'] = data['location_tracking'];
-      }
-
-      // Privacy settings
-      if (data.containsKey('profile_visibility')) {
-        updateFields.add('profile_visibility = @profile_visibility');
-        substitutionValues['profile_visibility'] = data['profile_visibility'];
-      }
-      if (data.containsKey('show_email')) {
-        updateFields.add('show_email = @show_email');
-        substitutionValues['show_email'] = data['show_email'];
-      }
-      if (data.containsKey('show_phone')) {
-        updateFields.add('show_phone = @show_phone');
-        substitutionValues['show_phone'] = data['show_phone'];
-      }
-
-      if (updateFields.isEmpty) {
-        return Response.badRequest(
-          body: jsonEncode({'success': false, 'error': 'No valid fields to update'}),
-          headers: {'Content-Type': 'application/json'}
-        );
-      }
-
-      // Add updated_at timestamp
-      updateFields.add('updated_at = CURRENT_TIMESTAMP');
-
-      final query = '''
-        UPDATE user_settings 
-        SET ${updateFields.join(', ')} 
-        WHERE user_id = @user_id
-        RETURNING *
-      ''';
-
-      final results = await db.query(query, substitutionValues: substitutionValues);
-
-      if (results.isEmpty) {
-        return Response.notFound(
-          jsonEncode({'success': false, 'error': 'User settings not found'}),
-          headers: {'Content-Type': 'application/json'}
-        );
-      }
-
-      final updatedSettings = results.first.toColumnMap();
-      return Response.ok(
-        jsonEncode({'success': true, 'settings': updatedSettings}),
+    if (data.isEmpty) {
+      return Response.badRequest(
+        body: jsonEncode({'error': 'No data provided for update'}),
         headers: {'Content-Type': 'application/json'}
       );
-    } catch (e) {
-      print('Update user settings error: $e');
+    }
+
+    // Check if user exists
+    final userExists = await db.mappedResultsQuery(
+      'SELECT id FROM users WHERE id = @id',
+      substitutionValues: {'id': userId},
+    );
+
+    if (userExists.isEmpty) {
+      return Response.notFound(
+        jsonEncode({'error': 'User not found'}),
+        headers: {'Content-Type': 'application/json'}
+      );
+    }
+
+    // Check if settings exist, create if not
+    final settingsExist = await db.mappedResultsQuery(
+      'SELECT user_id FROM user_settings WHERE user_id = @user_id',
+      substitutionValues: {'user_id': userId},
+    );
+
+    if (settingsExist.isEmpty) {
+      await db.query(
+        'INSERT INTO user_settings (user_id) VALUES (@user_id)',
+        substitutionValues: {'user_id': userId},
+      );
+    }
+
+    // Build dynamic update query based on provided fields
+    final updateFields = <String>[];
+    final substitutionValues = <String, dynamic>{'user_id': userId};
+
+    // Add valid fields to update (adjust these based on your user_settings table schema)
+    final validFields = [
+      'notification_preferences', 'theme', 'language', 'timezone', 
+      'privacy_settings', 'email_notifications', 'push_notifications',
+      'sms_notifications', 'marketing_emails', 'updated_at'
+    ];
+
+    for (final field in validFields) {
+      if (data.containsKey(field)) {
+        updateFields.add('$field = @$field');
+        substitutionValues[field] = data[field];
+      }
+    }
+
+    if (updateFields.isEmpty) {
+      return Response.badRequest(
+        body: jsonEncode({'error': 'No valid fields provided for update'}),
+        headers: {'Content-Type': 'application/json'}
+      );
+    }
+
+    // Add updated_at timestamp
+    if (!data.containsKey('updated_at')) {
+      updateFields.add('updated_at = @updated_at');
+      substitutionValues['updated_at'] = DateTime.now().toIso8601String();
+    }
+
+    final updateQuery = '''
+      UPDATE user_settings 
+      SET ${updateFields.join(', ')} 
+      WHERE user_id = @user_id
+    ''';
+
+    await db.query(updateQuery, substitutionValues: substitutionValues);
+
+    // Fetch and return updated settings
+    final results = await db.mappedResultsQuery(
+      'SELECT * FROM user_settings WHERE user_id = @user_id',
+      substitutionValues: {'user_id': userId},
+    );
+
+    if (results.isEmpty) {
       return Response.internalServerError(
-        body: jsonEncode({'success': false, 'error': e.toString()}),
+        body: jsonEncode({'error': 'Failed to fetch updated settings'}),
         headers: {'Content-Type': 'application/json'}
       );
     }
-  });
+
+    final settings = _convertDateTimes(results.first['user_settings'] ?? {});
+    return Response.ok(
+      jsonEncode({'success': true, 'settings': settings, 'message': 'Settings updated successfully'}),
+      headers: {'Content-Type': 'application/json'}
+    );
+
+  } catch (e) {
+    print('Update user settings error: $e');
+    return Response.internalServerError(
+      body: jsonEncode({'error': 'Invalid data format or database error'}),
+      headers: {'Content-Type': 'application/json'}
+    );
+  }
+});
 
   // Get all properties (returns JSON)
   router.get('/properties', (Request req) async {
