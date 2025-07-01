@@ -15,6 +15,7 @@ dependencies:
   dart_jsonwebtoken: ^3.2.0
   http: ^1.1.0  # For making HTTP requests to CAC website
   html: ^0.15.4  # For parsing HTML responses
+  uuid: ^4.0.0
 
 databases:
 - name: mipripity_db

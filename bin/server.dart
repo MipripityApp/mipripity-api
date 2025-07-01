@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:uuid/uuid.dart';
 import 'package:shelf/shelf.dart';
 import 'package:shelf/shelf_io.dart';
 import 'package:shelf_router/shelf_router.dart';
@@ -17,6 +18,7 @@ bool verifyPassword(String password, String hash) {
 }
 
 class Investment {
+  final String id;
   final String title;
   final String location;
   final String description;
@@ -28,46 +30,29 @@ class Investment {
   final int investors;
   final int remainingAmount;
   final int totalAmount;
-  final String images;
-  final String features;
-
-Map<String, dynamic> toJson() {
-  return {
-    'title': title,
-    'location': location,
-    'description': description,
-    'realtorName': realtorName,
-    'realtorImage': realtorImage,
-    'minInvestment': minInvestment,
-    'expectedReturn': expectedReturn,
-    'duration': duration,
-    'investors': investors,
-    'remainingAmount': remainingAmount,
-    'totalAmount': totalAmount,
-    'images': images,
-    'features': features,
-  };
-}
-
+  final String images;     // Stored as JSON string
+  final String features;   // Stored as JSON string
 
   Investment({
-    this.title,
-    this.location,
-    this.description,
-    this.realtorName,
-    this.realtorImage,
-    this.minInvestment,
-    this.expectedReturn,
-    this.duration,
-    this.investors,
-    this.remainingAmount,
-    this.totalAmount,
-    this.images,
-    this.features,
+    required this.id,
+    required this.title,
+    required this.location,
+    required this.description,
+    required this.realtorName,
+    required this.realtorImage,
+    required this.minInvestment,
+    required this.expectedReturn,
+    required this.duration,
+    required this.investors,
+    required this.remainingAmount,
+    required this.totalAmount,
+    required this.images,
+    required this.features,
   });
 
   factory Investment.fromJson(Map<String, dynamic> json) {
     return Investment(
+      id: json['id'],
       title: json['title'],
       location: json['location'],
       description: json['description'],
@@ -79,8 +64,8 @@ Map<String, dynamic> toJson() {
       investors: json['investors'],
       remainingAmount: json['remainingAmount'],
       totalAmount: json['totalAmount'],
-      images: json['images'],
-      features: json['features'],
+      images: json['images'],   // or jsonEncode(json['images']) if it's a list
+      features: json['features'], // or jsonEncode(json['features']) if it's a list
     );
   }
 }
@@ -520,45 +505,58 @@ router.put('/users/id/<id>/settings', (Request req, String id) async {
   });
 
 
-
 Future<Response> createInvestment(Request req) async {
   final db = await DatabaseHelper.connect();
-  final investment = Investment.fromJson(req.body);
+  final uuid = Uuid();
 
   try {
- await db.execute('''
-  INSERT INTO investments (
-    id, title, location, description, realtorName, realtorImage,
-    minInvestment, expectedReturn, duration, investors,
-    remainingAmount, totalAmount, images, features
-  ) VALUES (
-    @id, @title, @location, @description, @realtorName, @realtorImage,
-    @minInvestment, @expectedReturn, @duration, @investors,
-    @remainingAmount, @totalAmount, @images, @features
-  )
-''', substitutionValues: {
-  'id': investment.id, // Ensure `id` is included
-  'title': investment.title,
-  'location': investment.location,
-  'description': investment.description,
-  'realtorName': investment.realtorName,
-  'realtorImage': investment.realtorImage,
-  'minInvestment': investment.minInvestment,
-  'expectedReturn': investment.expectedReturn,
-  'duration': investment.duration,
-  'investors': investment.investors,
-  'remainingAmount': investment.remainingAmount,
-  'totalAmount': investment.totalAmount,
-  'images': jsonEncode(investment.images), // Encode list
-  'features': jsonEncode(investment.features), // Encode list
-});
+    final body = await req.readAsString();
+    final investmentData = jsonDecode(body);
 
-  return Response.ok('Investment created successfully');
-} catch (e) {
-  return Response.internalServerError(body: 'Error creating investment: $e');
-} finally {
-  await db.close();
-}
+    // Generate a new ID
+    final id = uuid.v4();
+
+    // Extract and prepare values
+    final investment = Investment.fromJson({
+      'id': id,
+      ...investmentData,
+    });
+
+    await db.execute('''
+      INSERT INTO investments (
+        id, title, location, description, realtorName, realtorImage,
+        minInvestment, expectedReturn, duration, investors,
+        remainingAmount, totalAmount, images, features
+      ) VALUES (
+        @id, @title, @location, @description, @realtorName, @realtorImage,
+        @minInvestment, @expectedReturn, @duration, @investors,
+        @remainingAmount, @totalAmount, @images, @features
+      )
+    ''', substitutionValues: {
+      'id': investment.id,
+      'title': investment.title,
+      'location': investment.location,
+      'description': investment.description,
+      'realtorName': investment.realtorName,
+      'realtorImage': investment.realtorImage,
+      'minInvestment': investment.minInvestment,
+      'expectedReturn': investment.expectedReturn,
+      'duration': investment.duration,
+      'investors': investment.investors,
+      'remainingAmount': investment.remainingAmount,
+      'totalAmount': investment.totalAmount,
+      'images': jsonEncode(investment.images),
+      'features': jsonEncode(investment.features),
+    });
+
+    return Response.ok('Investment created successfully');
+  } catch (e) {
+    return Response.internalServerError(
+      body: 'Error creating investment: $e',
+    );
+  } finally {
+    await db.close();
+  }
 }
 
 Future<Response> fetchInvestments(Request req) async {
