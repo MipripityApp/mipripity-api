@@ -64,8 +64,8 @@ class Investment {
     investors: json['investors'] ?? 0,
     remainingAmount: json['remainingamount'] ?? 0,
     totalAmount: json['totalamount'] ?? 0,
-    images: List<String>.from(json['images'] ?? []),
-    features: List<String>.from(json['features'] ?? []),
+    images: List<String>.from(jsonDecode(json['images'])),   
+    features: List<String>.from(jsonDecode(json['features'])),
   );
 }
 
