@@ -50,23 +50,43 @@ class Investment {
     required this.features,
   });
 
- factory Investment.fromJson(Map<String, dynamic> json) {
+  factory Investment.fromJson(Map<String, dynamic> json) {
   return Investment(
-    id: json['id'] ?? '',
-    title: json['title'] ?? '',
-    location: json['location'] ?? '',
-    description: json['description'] ?? '',
-    realtorName: json['realtorname'] ?? '', // fix casing
-    realtorImage: json['realtorimage'] ?? '',
-    minInvestment: json['mininvestment'] ?? 0,
-    expectedReturn: json['expectedreturn'] ?? '',
-    duration: json['duration'] ?? '',
-    investors: json['investors'] ?? 0,
-    remainingAmount: json['remainingamount'] ?? 0,
-    totalAmount: json['totalamount'] ?? 0,
-    images: List<String>.from(jsonDecode(json['images'])),   
-    features: List<String>.from(jsonDecode(json['features'])),
+    id: json['id'],
+    title: json['title'],
+    location: json['location'],
+    description: json['description'],
+    realtorName: json['realtorName'],
+    realtorImage: json['realtorImage'],
+    minInvestment: json['minInvestment'],
+    expectedReturn: json['expectedReturn'],
+    duration: json['duration'],
+    investors: json['investors'],
+    remainingAmount: json['remainingAmount'],
+    totalAmount: json['totalAmount'],
+    images: (json['images'] as List).map((e) => e.toString()).toList(),
+    features: (json['features'] as List).map((e) => e.toString()).toList(),
   );
+}
+
+
+Map<String, dynamic> toJson() {
+  return {
+    'id': id,
+    'title': title,
+    'location': location,
+    'description': description,
+    'realtorName': realtorName,
+    'realtorImage': realtorImage,
+    'minInvestment': minInvestment,
+    'expectedReturn': expectedReturn,
+    'duration': duration,
+    'investors': investors,
+    'remainingAmount': remainingAmount,
+    'totalAmount': totalAmount,
+    'images': images,
+    'features': features,
+  };
 }
 
 }
@@ -566,17 +586,38 @@ Future<Response> fetchInvestments(Request req) async {
   try {
     final results = await db.query('SELECT * FROM investments');
     final investments = results.map((row) {
-      final map = Map.fromIterables(
-        results.columnDescriptions.map((c) => c.columnName),
-        row,
-      );
-      print(map);
-      return Investment.fromJson(map);
-    }).toList();
+  final map = Map.fromIterables(
+    results.columnDescriptions.map((c) => c.columnName),
+    row,
+  );
 
-    return Response.ok(jsonEncode(investments), headers: {
-      'Content-Type': 'application/json',
-    });
+  // Decode JSON arrays from DB back to List<String>
+  final images = jsonDecode(map['images'] ?? '[]').cast<String>();
+  final features = jsonDecode(map['features'] ?? '[]').cast<String>();
+
+  return Investment(
+    id: map['id'],
+    title: map['title'],
+    location: map['location'],
+    description: map['description'],
+    realtorName: map['realtorname'],
+    realtorImage: map['realtorimage'],
+    minInvestment: map['mininvestment'],
+    expectedReturn: map['expectedreturn'],
+    duration: map['duration'],
+    investors: map['investors'],
+    remainingAmount: map['remainingamount'],
+    totalAmount: map['totalamount'],
+    images: images,
+    features: features,
+  ).toJson();
+}).toList();
+
+
+return Response.ok(jsonEncode(investments), headers: {
+  'Content-Type': 'application/json',
+});
+
   } catch (e) {
     return Response.internalServerError(
       body: jsonEncode({'error': 'Error fetching investments: $e'}),
