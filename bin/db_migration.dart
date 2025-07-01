@@ -47,6 +47,10 @@ void main() async {
 
     // Add any additional tables or schema updates here
 
+        // Create investments table if it doesn't exist
+    await _createInvestmentsTable(db);
+    print('Investments table created or verified');
+
     print('Database migration completed successfully');
   } catch (e) {
     print('Error during database migration: $e');
@@ -54,4 +58,25 @@ void main() async {
   } finally {
     await db.close();
   }
+}
+
+Future<void> _createInvestmentsTable(PostgreSQLConnection db) async {
+  await db.execute('''
+    CREATE TABLE IF NOT EXISTS investments (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      location TEXT NOT NULL,
+      description TEXT NOT NULL,
+      realtorName TEXT NOT NULL,
+      realtorImage TEXT NOT NULL,
+      minInvestment INTEGER NOT NULL,
+      expectedReturn TEXT NOT NULL,
+      duration TEXT NOT NULL,
+      investors INTEGER NOT NULL,
+      remainingAmount INTEGER NOT NULL,
+      totalAmount INTEGER NOT NULL,
+      images TEXT NOT NULL,
+      features TEXT NOT NULL
+    )
+  ''');
 }

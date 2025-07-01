@@ -16,6 +16,75 @@ bool verifyPassword(String password, String hash) {
   return hashPassword(password) == hash;
 }
 
+class Investment {
+  final String title;
+  final String location;
+  final String description;
+  final String realtorName;
+  final String realtorImage;
+  final int minInvestment;
+  final String expectedReturn;
+  final String duration;
+  final int investors;
+  final int remainingAmount;
+  final int totalAmount;
+  final String images;
+  final String features;
+
+Map<String, dynamic> toJson() {
+  return {
+    'title': title,
+    'location': location,
+    'description': description,
+    'realtorName': realtorName,
+    'realtorImage': realtorImage,
+    'minInvestment': minInvestment,
+    'expectedReturn': expectedReturn,
+    'duration': duration,
+    'investors': investors,
+    'remainingAmount': remainingAmount,
+    'totalAmount': totalAmount,
+    'images': images,
+    'features': features,
+  };
+}
+
+
+  Investment({
+    this.title,
+    this.location,
+    this.description,
+    this.realtorName,
+    this.realtorImage,
+    this.minInvestment,
+    this.expectedReturn,
+    this.duration,
+    this.investors,
+    this.remainingAmount,
+    this.totalAmount,
+    this.images,
+    this.features,
+  });
+
+  factory Investment.fromJson(Map<String, dynamic> json) {
+    return Investment(
+      title: json['title'],
+      location: json['location'],
+      description: json['description'],
+      realtorName: json['realtorName'],
+      realtorImage: json['realtorImage'],
+      minInvestment: json['minInvestment'],
+      expectedReturn: json['expectedReturn'],
+      duration: json['duration'],
+      investors: json['investors'],
+      remainingAmount: json['remainingAmount'],
+      totalAmount: json['totalAmount'],
+      images: json['images'],
+      features: json['features'],
+    );
+  }
+}
+
 void main() async {
   PostgreSQLConnection db;
 
@@ -449,6 +518,90 @@ router.put('/users/id/<id>/settings', (Request req, String id) async {
       headers: {'Content-Type': 'application/json'},
     );
   });
+
+
+
+Future<Response> createInvestment(Request req) async {
+  final db = await DatabaseHelper.connect();
+  final investment = Investment.fromJson(req.body);
+
+  try {
+ await db.execute('''
+  INSERT INTO investments (
+    id, title, location, description, realtorName, realtorImage,
+    minInvestment, expectedReturn, duration, investors,
+    remainingAmount, totalAmount, images, features
+  ) VALUES (
+    @id, @title, @location, @description, @realtorName, @realtorImage,
+    @minInvestment, @expectedReturn, @duration, @investors,
+    @remainingAmount, @totalAmount, @images, @features
+  )
+''', substitutionValues: {
+  'id': investment.id, // Ensure `id` is included
+  'title': investment.title,
+  'location': investment.location,
+  'description': investment.description,
+  'realtorName': investment.realtorName,
+  'realtorImage': investment.realtorImage,
+  'minInvestment': investment.minInvestment,
+  'expectedReturn': investment.expectedReturn,
+  'duration': investment.duration,
+  'investors': investment.investors,
+  'remainingAmount': investment.remainingAmount,
+  'totalAmount': investment.totalAmount,
+  'images': jsonEncode(investment.images), // Encode list
+  'features': jsonEncode(investment.features), // Encode list
+});
+
+  return Response.ok('Investment created successfully');
+} catch (e) {
+  return Response.internalServerError(body: 'Error creating investment: $e');
+} finally {
+  await db.close();
+}
+}
+
+Future<Response> fetchInvestments(Request req) async {
+  final db = await DatabaseHelper.connect();
+
+  try {
+    final results = await db.query('SELECT * FROM investments');
+    final investments = results.map((row) {
+      final map = Map.fromIterables(
+        results.columnDescriptions.map((c) => c.columnName),
+        row,
+      );
+      return Investment.fromJson(map);
+    }).toList();
+
+    return Response.ok(jsonEncode(investments), headers: {
+      'Content-Type': 'application/json',
+    });
+  } catch (e) {
+    return Response.internalServerError(
+      body: jsonEncode({'error': 'Error fetching investments: $e'}),
+    );
+  } finally {
+    await db.close();
+  }
+}
+
+  // Add API endpoint for creating investments
+  router.post('/investments', (Request req) async {
+    return createInvestment(req);
+  });
+
+  // Add API endpoint for fetching investments
+  router.get('/investments', (Request req) async {
+    return fetchInvestments(req);
+  });
+
+
+
+
+
+
+
 
   // CORS helper function
   Response _cors(Response response) => response.change(
