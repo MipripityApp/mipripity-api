@@ -30,8 +30,8 @@ class Investment {
   final int investors;
   final int remainingAmount;
   final int totalAmount;
-  final String images;     // Stored as JSON string
-  final String features;   // Stored as JSON string
+  final List<String> images;   
+  final List<String> features;  
 
   Investment({
     required this.id,
@@ -50,24 +50,25 @@ class Investment {
     required this.features,
   });
 
-  factory Investment.fromJson(Map<String, dynamic> json) {
-    return Investment(
-      id: json['id'],
-      title: json['title'],
-      location: json['location'],
-      description: json['description'],
-      realtorName: json['realtorName'],
-      realtorImage: json['realtorImage'],
-      minInvestment: json['minInvestment'],
-      expectedReturn: json['expectedReturn'],
-      duration: json['duration'],
-      investors: json['investors'],
-      remainingAmount: json['remainingAmount'],
-      totalAmount: json['totalAmount'],
-      images: json['images'],   // or jsonEncode(json['images']) if it's a list
-      features: json['features'], // or jsonEncode(json['features']) if it's a list
-    );
-  }
+ factory Investment.fromJson(Map<String, dynamic> json) {
+  return Investment(
+    id: json['id'] ?? '',
+    title: json['title'] ?? '',
+    location: json['location'] ?? '',
+    description: json['description'] ?? '',
+    realtorName: json['realtorname'] ?? '', // fix casing
+    realtorImage: json['realtorimage'] ?? '',
+    minInvestment: json['mininvestment'] ?? 0,
+    expectedReturn: json['expectedreturn'] ?? '',
+    duration: json['duration'] ?? '',
+    investors: json['investors'] ?? 0,
+    remainingAmount: json['remainingamount'] ?? 0,
+    totalAmount: json['totalamount'] ?? 0,
+    images: List<String>.from(json['images'] ?? []),
+    features: List<String>.from(json['features'] ?? []),
+  );
+}
+
 }
 
 void main() async {
