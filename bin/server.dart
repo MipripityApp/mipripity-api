@@ -569,6 +569,7 @@ Future<Response> fetchInvestments(Request req) async {
         results.columnDescriptions.map((c) => c.columnName),
         row,
       );
+      print(map);
       return Investment.fromJson(map);
     }).toList();
 
