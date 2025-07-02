@@ -154,21 +154,19 @@ void main() async {
       await db.execute('''
         CREATE TABLE IF NOT EXISTS poll_suggestions (
           id SERIAL PRIMARY KEY,
-          poll_property_id TEXT REFERENCES poll_properties(id),
           suggestion TEXT NOT NULL,
           votes INTEGER DEFAULT 0,
-          UNIQUE(poll_property_id, suggestion)
+          UNIQUE(id, suggestion)
         )
       ''');
       
       await db.execute('''
         CREATE TABLE IF NOT EXISTS poll_user_votes (
           id SERIAL PRIMARY KEY,
-          poll_property_id TEXT REFERENCES poll_properties(id),
           user_id TEXT NOT NULL,
           suggestion TEXT NOT NULL,
           voted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          UNIQUE(poll_property_id, user_id)
+          UNIQUE(id, user_id)
         )
       ''');
       
