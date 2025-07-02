@@ -346,7 +346,7 @@ void main() async {
         final suggestionResults = await db.mappedResultsQuery('''
           SELECT suggestion, votes 
           FROM poll_suggestions 
-          WHERE poll_property_id = @id
+          WHERE id = @id
           ORDER BY votes DESC
         ''', substitutionValues: {'id': propertyId});
         
@@ -408,10 +408,10 @@ void main() async {
       // Insert each suggestion with initial vote count of 0
       for (final suggestion in data['suggestions']) {
         await db.execute('''
-          INSERT INTO poll_suggestions (poll_property_id, suggestion, votes)
-          VALUES (@poll_id, @suggestion, 0)
+          INSERT INTO poll_suggestions (id, suggestion, votes)
+          VALUES (@id, @suggestion, 0)
         ''', substitutionValues: {
-          'poll_id': id,
+          'id': id,
           'suggestion': suggestion,
         });
       }
@@ -462,9 +462,9 @@ void main() async {
       
       // Check if suggestion exists for this poll property
       final suggestionExists = await db.mappedResultsQuery(
-        'SELECT id FROM poll_suggestions WHERE poll_property_id = @poll_id AND suggestion = @suggestion',
+        'SELECT id FROM poll_suggestions WHERE id = @id AND suggestion = @suggestion',
         substitutionValues: {
-          'poll_id': id,
+          'id': id,
           'suggestion': data['suggestion'],
         }
       );
@@ -478,9 +478,9 @@ void main() async {
       
       // Check if user has already voted for this poll property
       final userVoted = await db.mappedResultsQuery(
-        'SELECT id FROM poll_user_votes WHERE poll_property_id = @poll_id AND user_id = @user_id',
+        'SELECT id FROM poll_user_votes WHERE id = @id AND user_id = @user_id',
         substitutionValues: {
-          'poll_id': id,
+          'id': id,
           'user_id': data['user_id'],
         }
       );
@@ -488,9 +488,9 @@ void main() async {
       if (userVoted.isNotEmpty) {
         // User has already voted, check if it's for a different suggestion
         final previousVote = await db.mappedResultsQuery(
-          'SELECT suggestion FROM poll_user_votes WHERE poll_property_id = @poll_id AND user_id = @user_id',
+          'SELECT suggestion FROM poll_user_votes WHERE id = @id AND user_id = @user_id',
           substitutionValues: {
-            'poll_id': id,
+            'id': id,
             'user_id': data['user_id'],
           }
         );
@@ -511,27 +511,27 @@ void main() async {
         await db.transaction((ctx) async {
           // Decrement vote for previous suggestion
           await ctx.execute(
-            'UPDATE poll_suggestions SET votes = votes - 1 WHERE poll_property_id = @poll_id AND suggestion = @prev_suggestion',
+            'UPDATE poll_suggestions SET votes = votes - 1 WHERE id = @id AND suggestion = @prev_suggestion',
             substitutionValues: {
-              'poll_id': id,
+              'id': id,
               'prev_suggestion': previousSuggestion,
             }
           );
           
           // Increment vote for new suggestion
           await ctx.execute(
-            'UPDATE poll_suggestions SET votes = votes + 1 WHERE poll_property_id = @poll_id AND suggestion = @suggestion',
+            'UPDATE poll_suggestions SET votes = votes + 1 WHERE id = @id AND suggestion = @suggestion',
             substitutionValues: {
-              'poll_id': id,
+              'id': id,
               'suggestion': data['suggestion'],
             }
           );
           
           // Update user vote record
           await ctx.execute(
-            'UPDATE poll_user_votes SET suggestion = @suggestion, voted_at = CURRENT_TIMESTAMP WHERE poll_property_id = @poll_id AND user_id = @user_id',
+            'UPDATE poll_user_votes SET suggestion = @suggestion, voted_at = CURRENT_TIMESTAMP WHERE id = @id AND user_id = @user_id',
             substitutionValues: {
-              'poll_id': id,
+              'id': id,
               'user_id': data['user_id'],
               'suggestion': data['suggestion'],
             }
@@ -551,18 +551,18 @@ void main() async {
       await db.transaction((ctx) async {
         // Increment vote count for the suggestion
         await ctx.execute(
-          'UPDATE poll_suggestions SET votes = votes + 1 WHERE poll_property_id = @poll_id AND suggestion = @suggestion',
+          'UPDATE poll_suggestions SET votes = votes + 1 WHERE id = @id AND suggestion = @suggestion',
           substitutionValues: {
-            'poll_id': id,
+            'id': id,
             'suggestion': data['suggestion'],
           }
         );
         
         // Record that this user voted for this poll property
         await ctx.execute(
-          'INSERT INTO poll_user_votes (poll_property_id, user_id, suggestion) VALUES (@poll_id, @user_id, @suggestion)',
+          'INSERT INTO poll_user_votes (id, user_id, suggestion) VALUES (@id, @user_id, @suggestion)',
           substitutionValues: {
-            'poll_id': id,
+            'id': id,
             'user_id': data['user_id'],
             'suggestion': data['suggestion'],
           }
