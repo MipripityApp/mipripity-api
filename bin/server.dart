@@ -319,273 +319,370 @@ void main() async {
         substitutionValues: {'id': userId},
       );
   // Poll Properties Endpoints
-  // GET /poll_properties - Fetch all poll properties with their suggestions and vote counts
-  router.get('/poll_properties', (Request req) async {
-    try {
-      // First fetch all poll properties
-      final pollResults = await db.mappedResultsQuery('''
-        SELECT * FROM poll_properties ORDER BY created_at DESC
-      ''');
-      
-      if (pollResults.isEmpty) {
-        return Response.ok(
-          jsonEncode([]),
-          headers: {'Content-Type': 'application/json'}
-        );
-      }
-      
-      final List<Map<String, dynamic>> pollProperties = [];
-      
-      // For each poll property, fetch its suggestions and vote counts
-      for (final poll in pollResults) {
-        final pollData = _convertDateTimes(poll['poll_properties'] ?? {});
-        final propertyId = pollData['id'];
-        
-        final suggestionResults = await db.mappedResultsQuery('''
-          SELECT suggestion, votes 
-          FROM poll_suggestions 
-          WHERE id = @id
-          ORDER BY votes DESC
-        ''', substitutionValues: {'id': propertyId});
-        
-        final suggestions = suggestionResults.map((row) {
-          final suggestionData = row['poll_suggestions'] ?? {};
-          return {
-            'suggestion': suggestionData['suggestion'],
-            'votes': suggestionData['votes']
-          };
-        }).toList();
-        
-        pollData['suggestions'] = suggestions;
-        pollProperties.add(pollData);
-      }
-      
+// GET /poll_properties - Fetch all poll properties with their suggestions and vote counts
+router.get('/poll_properties', (Request req) async {
+  try {
+    // Fetch all poll properties
+    final pollResults = await db.mappedResultsQuery('''
+      SELECT * FROM poll_properties ORDER BY created_at DESC
+    ''');
+    
+    if (pollResults.isEmpty) {
       return Response.ok(
-        jsonEncode(pollProperties),
-        headers: {'Content-Type': 'application/json'}
-      );
-    } catch (e) {
-      print('Error fetching poll properties: $e');
-      return Response.internalServerError(
-        body: jsonEncode({'error': 'Failed to fetch poll properties'}),
+        jsonEncode([]),
         headers: {'Content-Type': 'application/json'}
       );
     }
-  });
-  
-  // POST /poll_properties - Create a new poll property with suggestions
-  router.post('/poll_properties', (Request req) async {
-    try {
-      final payload = await req.readAsString();
-      final data = jsonDecode(payload);
+    
+    final List<Map<String, dynamic>> pollProperties = [];
+    
+    // Process each poll property
+    for (final poll in pollResults) {
+      final pollData = _convertDateTimes(poll['poll_properties'] ?? {});
       
-      // Validate required fields
-      if (data['title'] == null || data['location'] == null || data['suggestions'] == null || 
-          !data['suggestions'].isNotEmpty) {
-        return Response.badRequest(
-          body: jsonEncode({'error': 'Missing required fields: title, location, suggestions'}),
-          headers: {'Content-Type': 'application/json'}
-        );
-      }
-      
-      // Generate unique ID for the poll property
-      final uuid = Uuid();
-      final id = uuid.v4();
-      
-      // Insert the poll property
-      await db.execute('''
-        INSERT INTO poll_properties (id, title, location, image_url)
-        VALUES (@id, @title, @location, @image_url)
-      ''', substitutionValues: {
-        'id': id,
-        'title': data['title'],
-        'location': data['location'],
-        'image_url': data['image_url'] ?? '',
-      });
-      
-      // Insert each suggestion with initial vote count of 0
-      for (final suggestion in data['suggestions']) {
-        await db.execute('''
-          INSERT INTO poll_suggestions (id, suggestion, votes)
-          VALUES (@id, @suggestion, 0)
-        ''', substitutionValues: {
-          'id': id,
-          'suggestion': suggestion,
-        });
-      }
-      
-      return Response.ok(
-        jsonEncode({
-          'success': true,
-          'id': id,
-          'message': 'Poll property created successfully'
-        }),
-        headers: {'Content-Type': 'application/json'}
-      );
-    } catch (e) {
-      print('Error creating poll property: $e');
-      return Response.internalServerError(
-        body: jsonEncode({'error': 'Failed to create poll property'}),
-        headers: {'Content-Type': 'application/json'}
-      );
-    }
-  });
-  
-  // POST /poll_properties/:id/vote - Record a vote for a specific suggestion
-  router.post('/poll_properties/<id>/vote', (Request req, String id) async {
-    try {
-      final payload = await req.readAsString();
-      final data = jsonDecode(payload);
-      
-      // Validate required fields
-      if (data['suggestion'] == null || data['user_id'] == null) {
-        return Response.badRequest(
-          body: jsonEncode({'error': 'Missing required fields: suggestion, user_id'}),
-          headers: {'Content-Type': 'application/json'}
-        );
-      }
-      
-      // Check if poll property exists
-      final pollExists = await db.mappedResultsQuery(
-        'SELECT id FROM poll_properties WHERE id = @id',
-        substitutionValues: {'id': id}
-      );
-      
-      if (pollExists.isEmpty) {
-        return Response.notFound(
-          jsonEncode({'error': 'Poll property not found'}),
-          headers: {'Content-Type': 'application/json'}
-        );
-      }
-      
-      // Check if suggestion exists for this poll property
-      final suggestionExists = await db.mappedResultsQuery(
-        'SELECT id FROM poll_suggestions WHERE id = @id AND suggestion = @suggestion',
-        substitutionValues: {
-          'id': id,
-          'suggestion': data['suggestion'],
-        }
-      );
-      
-      if (suggestionExists.isEmpty) {
-        return Response.badRequest(
-          body: jsonEncode({'error': 'Invalid suggestion for this poll property'}),
-          headers: {'Content-Type': 'application/json'}
-        );
-      }
-      
-      // Check if user has already voted for this poll property
-      final userVoted = await db.mappedResultsQuery(
-        'SELECT id FROM poll_user_votes WHERE id = @id AND user_id = @user_id',
-        substitutionValues: {
-          'id': id,
-          'user_id': data['user_id'],
-        }
-      );
-      
-      if (userVoted.isNotEmpty) {
-        // User has already voted, check if it's for a different suggestion
-        final previousVote = await db.mappedResultsQuery(
-          'SELECT suggestion FROM poll_user_votes WHERE id = @id AND user_id = @user_id',
-          substitutionValues: {
-            'id': id,
-            'user_id': data['user_id'],
+      // Parse suggestions if stored as JSON string, otherwise use as is
+      if (pollData['suggestions'] != null) {
+        if (pollData['suggestions'] is String) {
+          try {
+            pollData['suggestions'] = jsonDecode(pollData['suggestions']);
+          } catch (e) {
+            print('Error parsing suggestions JSON: $e');
+            pollData['suggestions'] = [];
           }
-        );
-        
-        final previousSuggestion = previousVote.first['poll_user_votes']?['suggestion'];
-        
-        if (previousSuggestion == data['suggestion']) {
-          return Response.ok(
-            jsonEncode({
-              'success': true,
-              'message': 'You have already voted for this suggestion'
-            }),
-            headers: {'Content-Type': 'application/json'}
-          );
         }
-        
-        // User is changing their vote, update the vote
-        await db.transaction((ctx) async {
-          // Decrement vote for previous suggestion
-          await ctx.execute(
-            'UPDATE poll_suggestions SET votes = votes - 1 WHERE id = @id AND suggestion = @prev_suggestion',
-            substitutionValues: {
-              'id': id,
-              'prev_suggestion': previousSuggestion,
-            }
-          );
-          
-          // Increment vote for new suggestion
-          await ctx.execute(
-            'UPDATE poll_suggestions SET votes = votes + 1 WHERE id = @id AND suggestion = @suggestion',
-            substitutionValues: {
-              'id': id,
-              'suggestion': data['suggestion'],
-            }
-          );
-          
-          // Update user vote record
-          await ctx.execute(
-            'UPDATE poll_user_votes SET suggestion = @suggestion, voted_at = CURRENT_TIMESTAMP WHERE id = @id AND user_id = @user_id',
-            substitutionValues: {
-              'id': id,
-              'user_id': data['user_id'],
-              'suggestion': data['suggestion'],
-            }
-          );
-        });
-        
+      } else {
+        pollData['suggestions'] = [];
+      }
+      
+      // Parse poll_user_votes if stored as JSON string
+      if (pollData['poll_user_votes'] != null) {
+        if (pollData['poll_user_votes'] is String) {
+          try {
+            pollData['poll_user_votes'] = jsonDecode(pollData['poll_user_votes']);
+          } catch (e) {
+            print('Error parsing poll_user_votes JSON: $e');
+            pollData['poll_user_votes'] = [];
+          }
+        }
+      } else {
+        pollData['poll_user_votes'] = [];
+      }
+      
+      // Parse poll_suggestions if stored as JSON string
+      if (pollData['poll_suggestions'] != null) {
+        if (pollData['poll_suggestions'] is String) {
+          try {
+            pollData['poll_suggestions'] = jsonDecode(pollData['poll_suggestions']);
+          } catch (e) {
+            print('Error parsing poll_suggestions JSON: $e');
+            pollData['poll_suggestions'] = [];
+          }
+        }
+      } else {
+        pollData['poll_suggestions'] = [];
+      }
+      
+      pollProperties.add(pollData);
+    }
+    
+    return Response.ok(
+      jsonEncode(pollProperties),
+      headers: {'Content-Type': 'application/json'}
+    );
+  } catch (e) {
+    print('Error fetching poll properties: $e');
+    return Response.internalServerError(
+      body: jsonEncode({'error': 'Failed to fetch poll properties: ${e.toString()}'}),
+      headers: {'Content-Type': 'application/json'}
+    );
+  }
+});
+
+// POST /poll_properties - Create a new poll property with suggestions
+router.post('/poll_properties', (Request req) async {
+  try {
+    final payload = await req.readAsString();
+    final data = jsonDecode(payload);
+    
+    // Validate required fields
+    if (data['title'] == null || 
+        data['location'] == null || 
+        data['suggestions'] == null || 
+        !(data['suggestions'] is List) ||
+        (data['suggestions'] as List).isEmpty) {
+      return Response.badRequest(
+        body: jsonEncode({'error': 'Missing required fields: title, location, suggestions (non-empty array)'}),
+        headers: {'Content-Type': 'application/json'}
+      );
+    }
+    
+    // Generate unique ID for the poll property
+    final uuid = Uuid();
+    final propertyId = uuid.v4();
+    
+    // Prepare suggestions data structure
+    final suggestions = (data['suggestions'] as List).map((suggestion) => {
+      'suggestion': suggestion.toString(),
+      'votes': 0
+    }).toList();
+    
+    // Insert the poll property with all data
+    await db.execute('''
+      INSERT INTO poll_properties (
+        property_id, 
+        title, 
+        location, 
+        image_url, 
+        suggestions, 
+        poll_user_votes, 
+        poll_suggestions, 
+        created_at
+      )
+      VALUES (
+        @property_id, 
+        @title, 
+        @location, 
+        @image_url, 
+        @suggestions, 
+        @poll_user_votes, 
+        @poll_suggestions, 
+        CURRENT_TIMESTAMP
+      )
+    ''', substitutionValues: {
+      'property_id': propertyId,
+      'title': data['title'],
+      'location': data['location'],
+      'image_url': data['image_url'] ?? '',
+      'suggestions': jsonEncode(suggestions),
+      'poll_user_votes': jsonEncode([]),
+      'poll_suggestions': jsonEncode(suggestions),
+    });
+    
+    return Response.ok(
+      jsonEncode({
+        'success': true,
+        'property_id': propertyId,
+        'message': 'Poll property created successfully'
+      }),
+      headers: {'Content-Type': 'application/json'}
+    );
+  } catch (e) {
+    print('Error creating poll property: $e');
+    return Response.internalServerError(
+      body: jsonEncode({'error': 'Failed to create poll property: ${e.toString()}'}),
+      headers: {'Content-Type': 'application/json'}
+    );
+  }
+});
+
+// POST /poll_properties/:id/vote - Record a vote for a specific suggestion
+router.post('/poll_properties/<id>/vote', (Request req, String id) async {
+  try {
+    final payload = await req.readAsString();
+    final data = jsonDecode(payload);
+    
+    // Validate required fields
+    if (data['suggestion'] == null || data['user_id'] == null) {
+      return Response.badRequest(
+        body: jsonEncode({'error': 'Missing required fields: suggestion, user_id'}),
+        headers: {'Content-Type': 'application/json'}
+      );
+    }
+    
+    // Fetch the poll property
+    final pollResults = await db.mappedResultsQuery(
+      'SELECT * FROM poll_properties WHERE property_id = @property_id',
+      substitutionValues: {'property_id': id}
+    );
+    
+    if (pollResults.isEmpty) {
+      return Response.notFound(
+        jsonEncode({'error': 'Poll property not found'}),
+        headers: {'Content-Type': 'application/json'}
+      );
+    }
+    
+    final pollData = pollResults.first['poll_properties'] ?? {};
+    
+    // Parse current data
+    List<dynamic> suggestions = [];
+    List<dynamic> userVotes = [];
+    
+    try {
+      suggestions = pollData['suggestions'] is String 
+        ? jsonDecode(pollData['suggestions']) 
+        : (pollData['suggestions'] ?? []);
+      userVotes = pollData['poll_user_votes'] is String 
+        ? jsonDecode(pollData['poll_user_votes']) 
+        : (pollData['poll_user_votes'] ?? []);
+    } catch (e) {
+      print('Error parsing JSON data: $e');
+      return Response.internalServerError(
+        body: jsonEncode({'error': 'Invalid data format in database'}),
+        headers: {'Content-Type': 'application/json'}
+      );
+    }
+    
+    // Check if suggestion exists
+    final suggestionExists = suggestions.any((s) => s['suggestion'] == data['suggestion']);
+    if (!suggestionExists) {
+      return Response.badRequest(
+        body: jsonEncode({'error': 'Invalid suggestion for this poll property'}),
+        headers: {'Content-Type': 'application/json'}
+      );
+    }
+    
+    // Check if user has already voted
+    final existingVoteIndex = userVotes.indexWhere((vote) => vote['user_id'] == data['user_id']);
+    
+    if (existingVoteIndex != -1) {
+      final previousSuggestion = userVotes[existingVoteIndex]['suggestion'];
+      
+      if (previousSuggestion == data['suggestion']) {
         return Response.ok(
           jsonEncode({
             'success': true,
-            'message': 'Vote changed successfully'
+            'message': 'You have already voted for this suggestion'
           }),
           headers: {'Content-Type': 'application/json'}
         );
       }
       
-      // User hasn't voted yet, record the vote
-      await db.transaction((ctx) async {
-        // Increment vote count for the suggestion
-        await ctx.execute(
-          'UPDATE poll_suggestions SET votes = votes + 1 WHERE id = @id AND suggestion = @suggestion',
-          substitutionValues: {
-            'id': id,
-            'suggestion': data['suggestion'],
-          }
-        );
-        
-        // Record that this user voted for this poll property
-        await ctx.execute(
-          'INSERT INTO poll_user_votes (id, user_id, suggestion) VALUES (@id, @user_id, @suggestion)',
-          substitutionValues: {
-            'id': id,
-            'user_id': data['user_id'],
-            'suggestion': data['suggestion'],
-          }
-        );
-      });
+      // User is changing their vote
+      // Decrement previous suggestion votes
+      for (int i = 0; i < suggestions.length; i++) {
+        if (suggestions[i]['suggestion'] == previousSuggestion) {
+          suggestions[i]['votes'] = (suggestions[i]['votes'] ?? 0) - 1;
+          if (suggestions[i]['votes'] < 0) suggestions[i]['votes'] = 0;
+          break;
+        }
+      }
       
-      return Response.ok(
-        jsonEncode({
-          'success': true,
-          'message': 'Vote recorded successfully'
-        }),
-        headers: {'Content-Type': 'application/json'}
-      );
-    } catch (e) {
-      print('Error recording vote: $e');
-      return Response.internalServerError(
-        body: jsonEncode({'error': 'Failed to record vote'}),
+      // Increment new suggestion votes
+      for (int i = 0; i < suggestions.length; i++) {
+        if (suggestions[i]['suggestion'] == data['suggestion']) {
+          suggestions[i]['votes'] = (suggestions[i]['votes'] ?? 0) + 1;
+          break;
+        }
+      }
+      
+      // Update user vote record
+      userVotes[existingVoteIndex] = {
+        'user_id': data['user_id'],
+        'suggestion': data['suggestion'],
+        'voted_at': DateTime.now().toIso8601String()
+      };
+      
+    } else {
+      // New vote
+      // Increment suggestion votes
+      for (int i = 0; i < suggestions.length; i++) {
+        if (suggestions[i]['suggestion'] == data['suggestion']) {
+          suggestions[i]['votes'] = (suggestions[i]['votes'] ?? 0) + 1;
+          break;
+        }
+      }
+      
+      // Add user vote record
+      userVotes.add({
+        'user_id': data['user_id'],
+        'suggestion': data['suggestion'],
+        'voted_at': DateTime.now().toIso8601String()
+      });
+    }
+    
+    // Update the database
+    await db.execute('''
+      UPDATE poll_properties SET 
+        suggestions = @suggestions,
+        poll_user_votes = @poll_user_votes,
+        poll_suggestions = @poll_suggestions
+      WHERE property_id = @property_id
+    ''', substitutionValues: {
+      'property_id': id,
+      'suggestions': jsonEncode(suggestions),
+      'poll_user_votes': jsonEncode(userVotes),
+      'poll_suggestions': jsonEncode(suggestions),
+    });
+    
+    final message = existingVoteIndex != -1 ? 'Vote changed successfully' : 'Vote recorded successfully';
+    
+    return Response.ok(
+      jsonEncode({
+        'success': true,
+        'message': message
+      }),
+      headers: {'Content-Type': 'application/json'}
+    );
+  } catch (e) {
+    print('Error recording vote: $e');
+    return Response.internalServerError(
+      body: jsonEncode({'error': 'Failed to record vote: ${e.toString()}'}),
+      headers: {'Content-Type': 'application/json'}
+    );
+  }
+});
+
+// GET /poll_properties/:id - Get a specific poll property
+router.get('/poll_properties/<id>', (Request req, String id) async {
+  try {
+    // Fetch the poll property
+    final pollResults = await db.mappedResultsQuery(
+      'SELECT * FROM poll_properties WHERE property_id = @property_id',
+      substitutionValues: {'property_id': id}
+    );
+    
+    if (pollResults.isEmpty) {
+      return Response.notFound(
+        jsonEncode({'error': 'Poll property not found'}),
         headers: {'Content-Type': 'application/json'}
       );
     }
-  });
+    
+    final pollData = _convertDateTimes(pollResults.first['poll_properties'] ?? {});
+    
+    // Parse JSON fields
+    if (pollData['suggestions'] != null && pollData['suggestions'] is String) {
+      try {
+        pollData['suggestions'] = jsonDecode(pollData['suggestions']);
+      } catch (e) {
+        pollData['suggestions'] = [];
+      }
+    }
+    
+    if (pollData['poll_user_votes'] != null && pollData['poll_user_votes'] is String) {
+      try {
+        pollData['poll_user_votes'] = jsonDecode(pollData['poll_user_votes']);
+      } catch (e) {
+        pollData['poll_user_votes'] = [];
+      }
+    }
+    
+    if (pollData['poll_suggestions'] != null && pollData['poll_suggestions'] is String) {
+      try {
+        pollData['poll_suggestions'] = jsonDecode(pollData['poll_suggestions']);
+      } catch (e) {
+        pollData['poll_suggestions'] = [];
+      }
+    }
+    
+    return Response.ok(
+      jsonEncode(pollData),
+      headers: {'Content-Type': 'application/json'}
+    );
+  } catch (e) {
+    print('Error fetching poll property: $e');
+    return Response.internalServerError(
+      body: jsonEncode({'error': 'Failed to fetch poll property: ${e.toString()}'}),
+      headers: {'Content-Type': 'application/json'}
+    );
+  }
+});
+
       if (results.isEmpty) {
         return Response.notFound(
           jsonEncode({'error': 'User not found'}),
-          headers: {'Content-Type': 'application/json'}
+          headers: {'Content-Type': 'application/json'},
         );
       }
 
@@ -597,7 +694,7 @@ void main() async {
     } catch (e) {
       print('Get user by ID error: $e');
       return Response.internalServerError(
-        body: jsonEncode({'error': 'Invalid user ID format'}),
+        body: jsonEncode({'error': 'Invalid user ID format or database error'}),
         headers: {'Content-Type': 'application/json'}
       );
     }
