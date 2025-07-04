@@ -155,6 +155,28 @@ void main() async {
         )
       ''');
       
+      // Create poll_suggestions table if it doesn't exist
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS poll_suggestions (
+          id UUID PRIMARY KEY,
+          poll_property_id UUID,
+          suggestion TEXT NOT NULL,
+          votes INTEGER DEFAULT 0,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      ''');
+      
+      // Create poll_user_votes table if it doesn't exist
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS poll_user_votes (
+          id UUID PRIMARY KEY,
+          user_id TEXT NOT NULL,
+          suggestion TEXT NOT NULL,
+          poll_property_id UUID,
+          voted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      ''');
+      
       print('Poll properties tables created successfully');
     } catch (e) {
       print('Error creating poll properties tables: $e');
@@ -1024,6 +1046,82 @@ return Response.ok(jsonEncode(investments), headers: {
 
   // CAC agency verification endpoint
   router.post('/verify-agency', CacVerificationHandler.handleVerifyAgency);
+
+  // New endpoint for voting on poll suggestions without property ID in URL
+  router.post('/poll_properties/vote', (Request req) async {
+    try {
+      final payload = await req.readAsString();
+      final data = jsonDecode(payload);
+
+      final userId = data['user_id'];
+      final suggestion = data['suggestion'];
+
+      if (userId == null || suggestion == null) {
+        return Response.badRequest(
+          body: jsonEncode({'error': 'Missing user_id or suggestion'}),
+          headers: {'Content-Type': 'application/json'},
+        );
+      }
+
+      // Step 1: Check if suggestion exists in poll_suggestions
+      final suggestionQuery = await db.query(
+        'SELECT * FROM poll_suggestions WHERE suggestion = @suggestion',
+        substitutionValues: {'suggestion': suggestion},
+      );
+
+      if (suggestionQuery.isEmpty) {
+        return Response.badRequest(
+          body: jsonEncode({'error': 'Invalid suggestion for this poll property'}),
+          headers: {'Content-Type': 'application/json'},
+        );
+      }
+
+      // Step 2: Prevent duplicate votes by checking poll_user_votes
+      final voteCheck = await db.query(
+        'SELECT * FROM poll_user_votes WHERE user_id = @userId AND suggestion = @suggestion',
+        substitutionValues: {
+          'userId': userId,
+          'suggestion': suggestion,
+        },
+      );
+
+      if (voteCheck.isNotEmpty) {
+        return Response.forbidden(
+          jsonEncode({'error': 'You have already voted for this suggestion'}),
+          headers: {'Content-Type': 'application/json'},
+        );
+      }
+
+      // Step 3: Record the vote
+      final voteId = Uuid().v4();
+      await db.execute(
+        'INSERT INTO poll_user_votes (id, user_id, suggestion, voted_at) '
+        'VALUES (@id, @userId, @suggestion, NOW())',
+        substitutionValues: {
+          'id': voteId,
+          'userId': userId,
+          'suggestion': suggestion,
+        },
+      );
+
+      // Step 4: Increment vote count
+      await db.execute(
+        'UPDATE poll_suggestions SET votes = votes + 1 WHERE suggestion = @suggestion',
+        substitutionValues: {'suggestion': suggestion},
+      );
+
+      return Response.ok(
+        jsonEncode({'message': 'Vote recorded successfully'}),
+        headers: {'Content-Type': 'application/json'},
+      );
+
+    } catch (e) {
+      return Response.internalServerError(
+        body: jsonEncode({'error': e.toString()}),
+        headers: {'Content-Type': 'application/json'},
+      );
+    }
+  });
 
   // Update the database schema to include new agency verification fields
   try {
