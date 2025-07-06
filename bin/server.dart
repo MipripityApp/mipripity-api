@@ -17,6 +17,79 @@ bool verifyPassword(String password, String hash) {
   return hashPassword(password) == hash;
 }
 
+// Model for Bid - users can place bids on properties
+class Bid {
+  final String id;
+  final String listingId;
+  final String listingTitle;
+  final String listingImage;
+  final String listingCategory;
+  final String listingLocation;
+  final double listingPrice;
+  final double bidAmount;
+  final String status; // 'pending', 'accepted', 'rejected', 'expired', 'withdrawn'
+  final String createdAt;
+  final String? responseMessage;
+  final String? responseDate;
+  final String? userId;
+
+  Bid({
+    required this.id,
+    required this.listingId,
+    required this.listingTitle,
+    required this.listingImage,
+    required this.listingCategory,
+    required this.listingLocation,
+    required this.listingPrice,
+    required this.bidAmount,
+    required this.status,
+    required this.createdAt,
+    this.responseMessage,
+    this.responseDate,
+    this.userId,
+  });
+
+  factory Bid.fromJson(Map<String, dynamic> json) {
+    return Bid(
+      id: json['id'] ?? '',
+      listingId: json['listing_id'] ?? '',
+      listingTitle: json['listing_title'] ?? '',
+      listingImage: json['listing_image'] ?? '',
+      listingCategory: json['listing_category'] ?? '',
+      listingLocation: json['listing_location'] ?? '',
+      listingPrice: (json['listing_price'] is num) 
+          ? (json['listing_price'] as num).toDouble() 
+          : double.tryParse(json['listing_price']?.toString() ?? '0') ?? 0.0,
+      bidAmount: (json['bid_amount'] is num) 
+          ? (json['bid_amount'] as num).toDouble() 
+          : double.tryParse(json['bid_amount']?.toString() ?? '0') ?? 0.0,
+      status: json['status'] ?? 'pending',
+      createdAt: json['created_at'] ?? DateTime.now().toIso8601String(),
+      responseMessage: json['response_message'],
+      responseDate: json['response_date'],
+      userId: json['user_id'],
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'listing_id': listingId,
+      'listing_title': listingTitle,
+      'listing_image': listingImage,
+      'listing_category': listingCategory,
+      'listing_location': listingLocation,
+      'listing_price': listingPrice,
+      'bid_amount': bidAmount,
+      'status': status,
+      'created_at': createdAt,
+      'response_message': responseMessage,
+      'response_date': responseDate,
+      'user_id': userId,
+    };
+  }
+}
+
 // Model for Poll Property - properties users can vote on suggested uses
 class PollProperty {
   final String id;
@@ -140,44 +213,63 @@ void main() async {
     print('Connected to database successfully using configuration from pubspec.yaml');
     
     // Create poll_properties table if it doesn't exist
-    try {
-      // Create poll_properties table exactly as described by the schema
-      await db.execute('''
-        CREATE TABLE IF NOT EXISTS poll_properties (
-          id TEXT PRIMARY KEY,
-          title TEXT NOT NULL,
-          location TEXT NOT NULL,
-          image_url TEXT NOT NULL,
-          suggestions JSONB DEFAULT '[]'::jsonb,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          poll_user_votes JSONB DEFAULT '[]'::jsonb,
-          poll_suggestions JSONB DEFAULT '[]'::jsonb
-        )
-      ''');
-      
-      // Create poll_suggestions table if it doesn't exist
-      await db.execute('''
-        CREATE TABLE IF NOT EXISTS poll_suggestions (
-          id UUID PRIMARY KEY,
-          poll_property_id UUID,
-          suggestion TEXT NOT NULL,
-          votes INTEGER DEFAULT 0,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-      ''');
-      
-      // Create poll_user_votes table if it doesn't exist
-      await db.execute('''
-        CREATE TABLE IF NOT EXISTS poll_user_votes (
-          id UUID PRIMARY KEY,
-          user_id TEXT NOT NULL,
-          suggestion TEXT NOT NULL,
-          poll_property_id UUID,
-          voted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-      ''');
-      
-      print('Poll properties tables created successfully');
+      try {
+        // Create poll_properties table exactly as described by the schema
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS poll_properties (
+            id TEXT PRIMARY KEY,
+            title TEXT NOT NULL,
+            location TEXT NOT NULL,
+            image_url TEXT NOT NULL,
+            suggestions JSONB DEFAULT '[]'::jsonb,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            poll_user_votes JSONB DEFAULT '[]'::jsonb,
+            poll_suggestions JSONB DEFAULT '[]'::jsonb
+          )
+        ''');
+        
+        // Create poll_suggestions table if it doesn't exist
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS poll_suggestions (
+            id UUID PRIMARY KEY,
+            poll_property_id UUID,
+            suggestion TEXT NOT NULL,
+            votes INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          )
+        ''');
+        
+        // Create poll_user_votes table if it doesn't exist
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS poll_user_votes (
+            id UUID PRIMARY KEY,
+            user_id TEXT NOT NULL,
+            suggestion TEXT NOT NULL,
+            poll_property_id UUID,
+            voted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          )
+        ''');
+        
+        // Create bids table if it doesn't exist
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS bids (
+            id TEXT PRIMARY KEY,
+            listing_id TEXT NOT NULL,
+            listing_title TEXT NOT NULL,
+            listing_image TEXT NOT NULL,
+            listing_category TEXT NOT NULL,
+            listing_location TEXT NOT NULL,
+            listing_price REAL NOT NULL,
+            bid_amount REAL NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            response_message TEXT,
+            response_date TIMESTAMP,
+            user_id TEXT NOT NULL
+          )
+        ''');
+        
+        print('Database tables created successfully');
     } catch (e) {
       print('Error creating poll properties tables: $e');
       // Continue anyway as this is not critical for the API to function
@@ -348,6 +440,215 @@ void main() async {
     }
   });
   
+  // Bids Endpoints
+  // GET /bids - Fetch all bids, with optional user_id filter
+  router.get('/bids', (Request req) async {
+    try {
+      final params = req.url.queryParameters;
+      final userId = params['user_id'];
+      
+      String query = 'SELECT * FROM bids';
+      Map<String, dynamic> substitutionValues = {};
+      
+      if (userId != null && userId.isNotEmpty) {
+        query += ' WHERE user_id = @user_id';
+        substitutionValues['user_id'] = userId;
+      }
+      
+      query += ' ORDER BY created_at DESC';
+      
+      final results = await db.mappedResultsQuery(query, substitutionValues: substitutionValues);
+      
+      final bids = results.map((row) {
+        final bidData = _convertDateTimes(row['bids'] ?? {});
+        return bidData;
+      }).toList();
+      
+      return Response.ok(
+        jsonEncode(bids),
+        headers: {'Content-Type': 'application/json'}
+      );
+    } catch (e) {
+      print('Error fetching bids: $e');
+      return Response.internalServerError(
+        body: jsonEncode({'error': 'Failed to fetch bids: $e'}),
+        headers: {'Content-Type': 'application/json'}
+      );
+    }
+  });
+  
+  // POST /bids - Create a new bid
+  router.post('/bids', (Request req) async {
+    try {
+      final payload = await req.readAsString();
+      final data = jsonDecode(payload);
+      
+      // Validate required fields
+      final requiredFields = [
+        'user_id', 'listing_id', 'listing_title', 'listing_image', 
+        'listing_category', 'listing_location', 'listing_price', 'bid_amount'
+      ];
+      
+      for (final field in requiredFields) {
+        if (data[field] == null) {
+          return Response.badRequest(
+            body: jsonEncode({'error': 'Missing required field: $field'}),
+            headers: {'Content-Type': 'application/json'}
+          );
+        }
+      }
+      
+      // Generate a unique ID for the bid
+      final uuid = Uuid();
+      final id = uuid.v4();
+      
+      // Insert the bid
+      await db.execute('''
+        INSERT INTO bids (
+          id, user_id, listing_id, listing_title, listing_image, 
+          listing_category, listing_location, listing_price, 
+          bid_amount, status, created_at
+        ) VALUES (
+          @id, @user_id, @listing_id, @listing_title, @listing_image, 
+          @listing_category, @listing_location, @listing_price, 
+          @bid_amount, @status, @created_at
+        )
+      ''', substitutionValues: {
+        'id': id,
+        'user_id': data['user_id'],
+        'listing_id': data['listing_id'],
+        'listing_title': data['listing_title'],
+        'listing_image': data['listing_image'],
+        'listing_category': data['listing_category'],
+        'listing_location': data['listing_location'],
+        'listing_price': data['listing_price'],
+        'bid_amount': data['bid_amount'],
+        'status': data['status'] ?? 'pending',
+        'created_at': data['created_at'] ?? DateTime.now().toIso8601String(),
+      });
+      
+      // Fetch the newly created bid
+      final results = await db.mappedResultsQuery(
+        'SELECT * FROM bids WHERE id = @id',
+        substitutionValues: {'id': id}
+      );
+      
+      if (results.isEmpty) {
+        return Response.internalServerError(
+          body: jsonEncode({'error': 'Failed to create bid'}),
+          headers: {'Content-Type': 'application/json'}
+        );
+      }
+      
+      final bid = _convertDateTimes(results.first['bids'] ?? {});
+      
+      return Response.ok(
+        jsonEncode({
+          'success': true,
+          'message': 'Bid created successfully',
+          'bid': bid
+        }),
+        headers: {'Content-Type': 'application/json'}
+      );
+    } catch (e) {
+      print('Error creating bid: $e');
+      return Response.internalServerError(
+        body: jsonEncode({'error': 'Failed to create bid: $e'}),
+        headers: {'Content-Type': 'application/json'}
+      );
+    }
+  });
+  
+  // PUT /bids/:id - Update a bid (amount or status)
+  router.put('/bids/<id>', (Request req, String id) async {
+    try {
+      final payload = await req.readAsString();
+      final data = jsonDecode(payload);
+      
+      // Check if bid exists
+      final existingBid = await db.mappedResultsQuery(
+        'SELECT * FROM bids WHERE id = @id',
+        substitutionValues: {'id': id}
+      );
+      
+      if (existingBid.isEmpty) {
+        return Response.notFound(
+          jsonEncode({'error': 'Bid not found'}),
+          headers: {'Content-Type': 'application/json'}
+        );
+      }
+      
+      // Build dynamic update query based on provided fields
+      final updateFields = <String>[];
+      final substitutionValues = <String, dynamic>{'id': id};
+      
+      // Allowed fields to update
+      final allowedFields = [
+        'bid_amount', 'status', 'response_message', 'response_date'
+      ];
+      
+      for (final field in allowedFields) {
+        if (data.containsKey(field)) {
+          updateFields.add('$field = @$field');
+          substitutionValues[field] = data[field];
+        }
+      }
+      
+      if (updateFields.isEmpty) {
+        return Response.badRequest(
+          body: jsonEncode({'error': 'No valid fields provided for update'}),
+          headers: {'Content-Type': 'application/json'}
+        );
+      }
+      
+      // If updating status to 'accepted' or 'rejected', add response date if not provided
+      if (data.containsKey('status') && 
+          (data['status'] == 'accepted' || data['status'] == 'rejected') && 
+          !data.containsKey('response_date')) {
+        updateFields.add('response_date = @response_date');
+        substitutionValues['response_date'] = DateTime.now().toIso8601String();
+      }
+      
+      final updateQuery = '''
+        UPDATE bids 
+        SET ${updateFields.join(', ')} 
+        WHERE id = @id
+      ''';
+      
+      await db.execute(updateQuery, substitutionValues: substitutionValues);
+      
+      // Fetch and return updated bid
+      final results = await db.mappedResultsQuery(
+        'SELECT * FROM bids WHERE id = @id',
+        substitutionValues: {'id': id}
+      );
+      
+      if (results.isEmpty) {
+        return Response.internalServerError(
+          body: jsonEncode({'error': 'Failed to fetch updated bid'}),
+          headers: {'Content-Type': 'application/json'}
+        );
+      }
+      
+      final bid = _convertDateTimes(results.first['bids'] ?? {});
+      
+      return Response.ok(
+        jsonEncode({
+          'success': true,
+          'message': 'Bid updated successfully',
+          'bid': bid
+        }),
+        headers: {'Content-Type': 'application/json'}
+      );
+    } catch (e) {
+      print('Error updating bid: $e');
+      return Response.internalServerError(
+        body: jsonEncode({'error': 'Failed to update bid: $e'}),
+        headers: {'Content-Type': 'application/json'}
+      );
+    }
+  });
+
   // Poll Properties Endpoints - moved to top level
   // GET /poll_properties - Fetch all poll properties with their suggestions and vote counts
   router.get('/poll_properties', (Request req) async {
