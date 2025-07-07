@@ -131,6 +131,82 @@ class PollProperty {
   }
 }
 
+// Handler for POST /properties endpoint
+Future<Response> handlePostProperty(Request request, PostgreSQLConnection connection) async {
+  try {
+    final payload = await request.readAsString();
+    final data = Map<String, dynamic>.from(jsonDecode(payload));
+
+    // Extract all expected fields
+    final propertyId = data['property_id'];
+    final title = data['title'];
+    final price = data['price'];
+    final location = data['location'];
+    final category = data['category'];
+    final userId = data['user_id'];
+    final description = data['description'];
+    final condition = data['condition'];
+    final quantity = data['quantity'];
+    final type = data['type'];
+    final address = data['address'];
+    final listerName = data['lister_name'];
+    final listerEmail = data['lister_email'];
+    final listerWhatsapp = data['lister_whatsapp'];
+    final images = data['images'] != null ? jsonEncode(data['images']) : null;
+    final latitude = data['latitude'];
+    final longitude = data['longitude'];
+    final isActive = data['is_active'] ?? true;
+    final isVerified = data['is_verified'] ?? false;
+
+    // Insert into database
+    await connection.query('''
+      INSERT INTO properties (
+        property_id, title, price, location, category, user_id,
+        description, condition, quantity, type, address,
+        lister_name, lister_email, lister_whatsapp, images,
+        latitude, longitude, is_active, is_verified, created_at, updated_at
+      ) VALUES (
+        @property_id, @title, @price, @location, @category, @user_id,
+        @description, @condition, @quantity, @type, @address,
+        @lister_name, @lister_email, @lister_whatsapp, @images,
+        @latitude, @longitude, @is_active, @is_verified, NOW(), NOW()
+      )
+    ''', substitutionValues: {
+      'property_id': propertyId,
+      'title': title,
+      'price': price,
+      'location': location,
+      'category': category,
+      'user_id': userId,
+      'description': description,
+      'condition': condition,
+      'quantity': quantity,
+      'type': type,
+      'address': address,
+      'lister_name': listerName,
+      'lister_email': listerEmail,
+      'lister_whatsapp': listerWhatsapp,
+      'images': images,
+      'latitude': latitude,
+      'longitude': longitude,
+      'is_active': isActive,
+      'is_verified': isVerified,
+    });
+
+    return Response.ok(jsonEncode({'status': 'success', 'message': 'Property created successfully'}), headers: {
+      'Content-Type': 'application/json',
+    });
+
+  } catch (e, stack) {
+    print('POST /properties failed: $e\n$stack');
+    return Response.internalServerError(body: jsonEncode({
+      'status': 'error',
+      'message': 'Failed to create property',
+      'error': e.toString()
+    }));
+  }
+}
+
 class Investment {
   final String id;
   final String title;
@@ -1142,26 +1218,9 @@ router.put('/users/id/<id>/settings', (Request req, String id) async {
     return Response.ok(jsonEncode(properties), headers: {'Content-Type': 'application/json'});
   });
 
-  // Create property
-  router.post('/properties', (Request req) async {
-    final payload = await req.readAsString();
-    final data = Map<String, dynamic>.from(jsonDecode(payload));
-
-    // Validate required fields
-    if (!data.containsKey('title') || !data.containsKey('type') || !data.containsKey('location')) {
-      return Response.badRequest(body: jsonEncode({'error': 'Missing required fields: title, type, location'}), headers: {'Content-Type': 'application/json'});
-    }
-
-    final id = await db.query(
-      'INSERT INTO properties (title, type, location) VALUES (@title, @type, @location) RETURNING id',
-      substitutionValues: {
-        'title': data['title'],
-        'type': data['type'],
-        'location': data['location'],
-      },
-    );
-
-    return Response.ok(jsonEncode({'success': true, 'id': id.first[0]}), headers: {'Content-Type': 'application/json'});
+  // Create property - using the comprehensive handlePostProperty function
+  router.post('/properties', (Request req) {
+    return handlePostProperty(req, db);
   });
 
   router.get('/properties/residential', (Request req) async {
