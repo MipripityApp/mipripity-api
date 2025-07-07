@@ -13,9 +13,11 @@ dependencies:
   test: ^1.26.2
   crypto: ^3.0.6
   dart_jsonwebtoken: ^3.2.0
-  http: ^1.1.0  # For making HTTP requests to CAC website
+  http: ^1.1.0  # For making HTTP requests and Cloudinary uploads
   html: ^0.15.4  # For parsing HTML responses
   uuid: ^4.0.0
+  shelf_multipart: ^1.0.0  # For handling multipart form data (file uploads)
+  mime: ^1.0.4  # For detecting MIME types
 
 databases:
 - name: mipripity_db

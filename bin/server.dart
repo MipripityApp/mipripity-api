@@ -8,6 +8,9 @@ import 'package:postgres/postgres.dart';
 import 'package:mipripity_api/database_helper.dart';
 import 'package:mipripity_api/cac_verification.dart'; // Import CAC verification handler
 import 'package:crypto/crypto.dart';
+import 'package:http/http.dart' as http;
+import 'package:mime/mime.dart';
+import 'package:shelf_multipart/multipart.dart';
 
 String hashPassword(String password) {
   return sha256.convert(utf8.encode(password)).toString();
@@ -355,10 +358,56 @@ void main() async {
     exit(1);
   }
 
+  // Image upload handler for Cloudinary
+  Future<Response> handleUploadImage(Request request) async {
+    try {
+      final boundary = request.headers['content-type']?.split('boundary=')?.last;
+      final transformer = MimeMultipartTransformer(boundary!);
+      final bodyStream = request.read();
+      final parts = await transformer.bind(bodyStream).toList();
+
+      for (final part in parts) {
+        final contentDisposition = part.headers['content-disposition'];
+        if (contentDisposition != null && contentDisposition.contains('filename=')) {
+          final fileBytes = await part.toList();
+          final fullBytes = fileBytes.expand((e) => e).toList();
+
+          // Upload to Cloudinary
+          final uri = Uri.parse('https://api.cloudinary.com/v1_1/dxhrlaz6j/image/upload');
+          final requestToCloudinary = http.MultipartRequest('POST', uri)
+            ..fields['upload_preset'] = 'mipripity'
+            ..files.add(http.MultipartFile.fromBytes('file', fullBytes, filename: 'upload.jpg'));
+
+          final response = await requestToCloudinary.send();
+
+          if (response.statusCode == 200) {
+            final responseData = await response.stream.bytesToString();
+            final data = json.decode(responseData);
+            return Response.ok(jsonEncode({
+              'status': 'success',
+              'url': data['secure_url'],
+            }), headers: {'Content-Type': 'application/json'});
+          } else {
+            return Response.internalServerError(body: jsonEncode({'error': 'Cloudinary upload failed'}));
+          }
+        }
+      }
+
+      return Response.badRequest(body: jsonEncode({'error': 'No file found'}));
+    } catch (e) {
+      return Response.internalServerError(body: jsonEncode({'error': e.toString()}));
+    }
+  }
+
   final router = Router();
 
   router.get('/', (Request req) async {
     return Response.ok('Mipripity API is running');
+  });
+  
+  // Register the upload endpoint
+  router.post('/upload', (Request request) async {
+    return await handleUploadImage(request);
   });
   
   // Helper to convert DateTime fields to string

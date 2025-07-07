@@ -250,13 +250,13 @@ packages:
     source: hosted
     version: "1.16.0"
   mime:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: mime
-      sha256: "41a20518f0cb1256669420fdba0cd90d21561e560ac240f26ef8322e45bb7ed6"
+      sha256: "801fd0b26f14a4a58ccb09d5892c3fbdeff209594300a542492cf13fba9d247a"
       url: "https://pub.dev"
     source: hosted
-    version: "2.0.0"
+    version: "1.0.6"
   node_preamble:
     dependency: transitive
     description:
@@ -337,6 +337,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.4.2"
+  shelf_multipart:
+    dependency: "direct main"
+    description:
+      name: shelf_multipart
+      sha256: "6dc368d7778ea031e7f688b70ea95b1b27731116cf71d837f6a25df613d81902"
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.0.0"
   shelf_packages_handler:
     dependency: transitive
     description:
