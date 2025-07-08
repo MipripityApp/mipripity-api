@@ -1396,6 +1396,39 @@ router.put('/users/id/<id>/settings', (Request req, String id) async {
       headers: {'Content-Type': 'application/json'},
     );
   });
+  
+  // Get properties by user_id
+  router.get('/properties/user', (Request req) async {
+    try {
+      final params = req.url.queryParameters;
+      final userId = params['user_id'];
+      
+      if (userId == null || userId.isEmpty) {
+        return Response.badRequest(
+          body: jsonEncode({'error': 'Missing required user_id parameter'}),
+          headers: {'Content-Type': 'application/json'}
+        );
+      }
+      
+      final results = await db.mappedResultsQuery(
+        'SELECT * FROM properties WHERE user_id = @user_id ORDER BY created_at DESC',
+        substitutionValues: {'user_id': userId},
+      );
+      
+      final properties = results.map((row) => _convertDateTimes(row['properties'] ?? {})).toList();
+      
+      return Response.ok(
+        jsonEncode(properties),
+        headers: {'Content-Type': 'application/json'}
+      );
+    } catch (e) {
+      print('Error fetching properties by user_id: $e');
+      return Response.internalServerError(
+        body: jsonEncode({'error': 'Failed to fetch user properties: $e'}),
+        headers: {'Content-Type': 'application/json'}
+      );
+    }
+  });
 
 
 Future<Response> createInvestment(Request req) async {
