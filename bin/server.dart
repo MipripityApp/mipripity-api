@@ -445,7 +445,39 @@ void main() async {
     return Response.ok('Mipripity API is running');
   });
   
-  // Register the upload endpoint
+  // Register the upload endpoints
+  // GET handler returns a simple HTML form for testing uploads
+  router.get('/upload', (Request request) async {
+    return Response.ok('''
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Mipripity Image Upload</title>
+          <style>
+            body { font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; }
+            h1 { color: #333; }
+            form { margin-top: 20px; border: 1px solid #ddd; padding: 20px; border-radius: 5px; }
+            input[type=file] { margin: 10px 0; }
+            button { background: #4CAF50; color: white; border: none; padding: 10px 15px; border-radius: 4px; cursor: pointer; }
+            button:hover { background: #45a049; }
+          </style>
+        </head>
+        <body>
+          <h1>Mipripity Image Upload</h1>
+          <p>Use this form to test the image upload API, or use the POST endpoint programmatically.</p>
+          <form action="/upload" method="post" enctype="multipart/form-data">
+            <div>
+              <label for="file">Select image to upload:</label><br>
+              <input type="file" id="file" name="file" accept="image/*">
+            </div>
+            <button type="submit">Upload Image</button>
+          </form>
+        </body>
+      </html>
+    ''', headers: {'Content-Type': 'text/html'});
+  });
+  
+  // POST handler processes the image upload
   router.post('/upload', (Request request) async {
     return await handleUploadImage(request);
   });
