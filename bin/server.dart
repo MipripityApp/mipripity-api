@@ -358,13 +358,12 @@ void main() async {
     exit(1);
   }
 
-  // Image upload handler for Cloudinary
+  // Image upload handler for Cloudinary with Replicate Real-ESRGAN enhancement
   Future<Response> handleUploadImage(Request request) async {
     try {
       final boundary = request.headers['content-type']?.split('boundary=')?.last;
       final transformer = MimeMultipartTransformer(boundary!);
-      final bodyStream = request.read();
-      final parts = await transformer.bind(bodyStream).toList();
+      final parts = await transformer.bind(request.read()).toList();
 
       for (final part in parts) {
         final contentDisposition = part.headers['content-disposition'];
@@ -372,24 +371,65 @@ void main() async {
           final fileBytes = await part.toList();
           final fullBytes = fileBytes.expand((e) => e).toList();
 
-          // Upload to Cloudinary
-          final uri = Uri.parse('https://api.cloudinary.com/v1_1/dxhrlaz6j/image/upload');
-          final requestToCloudinary = http.MultipartRequest('POST', uri)
+          // Step 1: Upload to Cloudinary temporarily
+          final cloudinaryUploadUri = Uri.parse('https://api.cloudinary.com/v1_1/dxhrlaz6j/image/upload');
+          final cloudinaryUpload = http.MultipartRequest('POST', cloudinaryUploadUri)
             ..fields['upload_preset'] = 'mipripity'
-            ..files.add(http.MultipartFile.fromBytes('file', fullBytes, filename: 'upload.jpg'));
+            ..files.add(http.MultipartFile.fromBytes('file', fullBytes, filename: 'original.jpg'));
 
-          final response = await requestToCloudinary.send();
+          final cloudinaryResponse = await cloudinaryUpload.send();
+          final cloudinaryResult = await cloudinaryResponse.stream.bytesToString();
+          final cloudinaryData = jsonDecode(cloudinaryResult);
+          final originalImageUrl = cloudinaryData['secure_url'];
 
-          if (response.statusCode == 200) {
-            final responseData = await response.stream.bytesToString();
-            final data = json.decode(responseData);
-            return Response.ok(jsonEncode({
-              'status': 'success',
-              'url': data['secure_url'],
-            }), headers: {'Content-Type': 'application/json'});
-          } else {
+          if (originalImageUrl == null) {
             return Response.internalServerError(body: jsonEncode({'error': 'Cloudinary upload failed'}));
           }
+
+          // Step 2: Enhance with Replicate Real-ESRGAN
+          final replicateToken = 'Token r8_Q5kyvZPZ5Q0c1oyFB1W8MxLvSgK1PmH0ubyMd';
+          final replicateResponse = await http.post(
+            Uri.parse('https://api.replicate.com/v1/predictions'),
+            headers: {
+              'Authorization': replicateToken,
+              'Content-Type': 'application/json',
+            },
+            body: jsonEncode({
+              'version': 'db21e45a3f647123bfdfdfb503e6c43c20404983c5d3c99c06a2c7a7afcddb6c',
+              'input': {
+                'image': originalImageUrl,
+                'scale': 2
+              },
+            }),
+          );
+
+          if (replicateResponse.statusCode != 201) {
+            return Response.internalServerError(body: replicateResponse.body);
+          }
+
+          final replicateData = jsonDecode(replicateResponse.body);
+          final getResultUrl = replicateData['urls']['get'];
+
+          // Step 3: Poll Replicate until enhancement completes
+          for (int i = 0; i < 10; i++) {
+            final statusResponse = await http.get(
+              Uri.parse(getResultUrl),
+              headers: {'Authorization': replicateToken},
+            );
+            final statusData = jsonDecode(statusResponse.body);
+
+            if (statusData['status'] == 'succeeded') {
+              final enhancedImageUrl = statusData['output'];
+              return Response.ok(jsonEncode({
+                'status': 'success',
+                'url': enhancedImageUrl,
+              }), headers: {'Content-Type': 'application/json'});
+            }
+
+            await Future.delayed(Duration(seconds: 2));
+          }
+
+          return Response.internalServerError(body: jsonEncode({'error': 'Replicate enhancement timed out'}));
         }
       }
 
