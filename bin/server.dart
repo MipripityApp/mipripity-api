@@ -10,7 +10,6 @@ import 'package:mipripity_api/cac_verification.dart'; // Import CAC verification
 import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
 import 'package:mime/mime.dart';
-import 'package:shelf_multipart/multipart.dart';
 
 String hashPassword(String password) {
   return sha256.convert(utf8.encode(password)).toString();
@@ -284,6 +283,203 @@ Map<String, dynamic> toJson() {
 
 }
 
+// Paystack API handler functions
+Future<Response> handlePaystackInitialize(Request request) async {
+  try {
+    // Get Paystack secret key from environment variables (for security)
+    final paystackSecretKey = Platform.environment['PAYSTACK_SECRET_KEY'] ?? 'sk_live_fe4415cf99c999fb2b731f8991c94e548421aa90';
+    
+    // Read request body
+    final payload = await request.readAsString();
+    final requestData = jsonDecode(payload);
+    
+    // Validate required fields
+    if (requestData['email'] == null || requestData['amount'] == null) {
+      return Response.badRequest(
+        body: jsonEncode({'error': 'Email and amount are required'}),
+        headers: {'Content-Type': 'application/json'},
+      );
+    }
+    
+    // Prepare data for Paystack API
+    final Map<String, dynamic> paystackData = {
+      'email': requestData['email'],
+      'amount': requestData['amount'],
+      'currency': 'NGN',
+      'reference': requestData['reference'] ?? 'MIP${DateTime.now().millisecondsSinceEpoch}',
+      'callback_url': requestData['callback_url'] ?? 'https://mipripity-api-1.onrender.com/webhook',
+    };
+    
+    // Add metadata if provided
+    if (requestData['metadata'] != null) {
+      paystackData['metadata'] = requestData['metadata'];
+    }
+    
+    // Initialize transaction with Paystack API
+    final response = await http.post(
+      Uri.parse('https://api.paystack.co/transaction/initialize'),
+      headers: {
+        'Authorization': 'Bearer $paystackSecretKey',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode(paystackData),
+    );
+    
+    // Parse response
+    final responseData = jsonDecode(response.body);
+    
+    if (response.statusCode == 200) {
+      // Return success with authorization URL
+      return Response.ok(
+        jsonEncode({
+          'authorization_url': responseData['data']['authorization_url'],
+          'access_code': responseData['data']['access_code'],
+          'reference': responseData['data']['reference'],
+        }),
+        headers: {'Content-Type': 'application/json'},
+      );
+    } else {
+      // Return error
+      return Response(
+        response.statusCode,
+        body: jsonEncode({
+          'error': responseData['message'] ?? 'Failed to initialize transaction',
+        }),
+        headers: {'Content-Type': 'application/json'},
+      );
+    }
+  } catch (e) {
+    print('Paystack initialize error: $e');
+    return Response.internalServerError(
+      body: jsonEncode({'error': 'An unexpected error occurred'}),
+      headers: {'Content-Type': 'application/json'},
+    );
+  }
+}
+
+Future<Response> handlePaystackVerify(Request request) async {
+  try {
+    // Get Paystack secret key from environment variables (for security)
+    final paystackSecretKey = Platform.environment['PAYSTACK_SECRET_KEY'] ?? 'sk_live_fe4415cf99c999fb2b731f8991c94e548421aa90';
+    
+    // Read request body
+    final payload = await request.readAsString();
+    final requestData = jsonDecode(payload);
+    
+    // Validate required fields
+    if (requestData['reference'] == null) {
+      return Response.badRequest(
+        body: jsonEncode({'error': 'Transaction reference is required'}),
+        headers: {'Content-Type': 'application/json'},
+      );
+    }
+    
+    final reference = requestData['reference'];
+    
+    // Verify transaction with Paystack API
+    final response = await http.get(
+      Uri.parse('https://api.paystack.co/transaction/verify/$reference'),
+      headers: {
+        'Authorization': 'Bearer $paystackSecretKey',
+        'Content-Type': 'application/json',
+      },
+    );
+    
+    // Parse response
+    final responseData = jsonDecode(response.body);
+    
+    if (response.statusCode == 200) {
+      // Check if transaction was successful
+      final status = responseData['data']['status'];
+      final isSuccess = status == 'success';
+      
+      // Log transaction information (optional)
+      if (isSuccess) {
+        // Here you could store the transaction in your database
+        // Or perform other actions based on the payment
+        print('Payment successful: $reference');
+        
+        // If property_id is provided, update property with payment information
+        if (requestData['property_id'] != null) {
+          // You could implement property-specific logic here
+          print('Payment for property: ${requestData['property_id']}');
+        }
+      }
+      
+      // Return verification result
+      return Response.ok(
+        jsonEncode({
+          'verified': isSuccess,
+          'status': status,
+          'amount': responseData['data']['amount'],
+          'transaction_date': responseData['data']['transaction_date'],
+          'reference': reference,
+        }),
+        headers: {'Content-Type': 'application/json'},
+      );
+    } else {
+      // Return error
+      return Response(
+        response.statusCode,
+        body: jsonEncode({
+          'error': responseData['message'] ?? 'Failed to verify transaction',
+        }),
+        headers: {'Content-Type': 'application/json'},
+      );
+    }
+  } catch (e) {
+    print('Paystack verify error: $e');
+    return Response.internalServerError(
+      body: jsonEncode({'error': 'An unexpected error occurred'}),
+      headers: {'Content-Type': 'application/json'},
+    );
+  }
+}
+
+// Webhook handler for Paystack callbacks
+Future<Response> handlePaystackWebhook(Request request) async {
+  try {
+    // Get Paystack secret key from environment variables (for security)
+    final paystackSecretKey = Platform.environment['PAYSTACK_SECRET_KEY'] ?? 'sk_live_fe4415cf99c999fb2b731f8991c94e548421aa90';
+    
+    // Verify Paystack signature if provided (for production)
+    final signature = request.headers['x-paystack-signature'];
+    
+    // Read request body
+    final payload = await request.readAsString();
+    final eventData = jsonDecode(payload);
+    
+    // Extract event information
+    final event = eventData['event'];
+    
+    if (event == 'charge.success') {
+      // Handle successful payment
+      final data = eventData['data'];
+      final reference = data['reference'];
+      final amount = data['amount'];
+      final status = data['status'];
+      
+      print('Webhook: Successful payment - Reference: $reference, Amount: $amount, Status: $status');
+      
+      // Here you could update your database or trigger other actions
+      // based on the successful payment
+    }
+    
+    // Always return 200 OK to acknowledge receipt of webhook
+    return Response.ok(
+      jsonEncode({'status': 'success'}),
+      headers: {'Content-Type': 'application/json'},
+    );
+  } catch (e) {
+    print('Paystack webhook error: $e');
+    // Still return 200 OK to prevent Paystack from retrying
+    return Response.ok(
+      jsonEncode({'status': 'error', 'message': 'Error processing webhook'}),
+      headers: {'Content-Type': 'application/json'},
+    );
+  }
+}
+
 void main() async {
   PostgreSQLConnection db;
 
@@ -361,7 +557,7 @@ void main() async {
   // Image upload handler for Cloudinary with Replicate Real-ESRGAN enhancement
   Future<Response> handleUploadImage(Request request) async {
     try {
-      final boundary = request.headers['content-type']?.split('boundary=')?.last;
+      final boundary = request.headers['content-type']?.split('boundary=').last;
       final transformer = MimeMultipartTransformer(boundary!);
       final parts = await transformer.bind(request.read()).toList();
 
@@ -440,6 +636,11 @@ void main() async {
   }
 
   final router = Router();
+  
+  // Register Paystack endpoints
+  router.post('/paystack/initialize', handlePaystackInitialize);
+  router.post('/paystack/verify', handlePaystackVerify);
+  router.post('/webhook', handlePaystackWebhook);
 
   router.get('/', (Request req) async {
     return Response.ok('Mipripity API is running');
