@@ -693,6 +693,20 @@ void main() async {
     });
     return result;
   }
+  
+  // Helper to safely parse numeric values to double
+  double _parseDouble(dynamic value) {
+    if (value == null) return 0.0;
+    if (value is num) return value.toDouble();
+    if (value is String) {
+      try {
+        return double.parse(value);
+      } catch (_) {
+        return 0.0;
+      }
+    }
+    return 0.0;
+  }
 
   // Get all users (admin endpoint)
   router.get('/users', (Request req) async {
@@ -1952,19 +1966,38 @@ return Response.ok(jsonEncode(investments), headers: {
         _convertDateTimes(row['financial_transactions'] ?? {})
       ).toList();
       
-      // Fetch active bids
-      final bids = await db.mappedResultsQuery('''
-        SELECT * FROM bids 
-        WHERE user_id = @user_id AND status IN ('pending', 'active') 
-        ORDER BY created_at DESC
-      ''', substitutionValues: {'user_id': userId.toString()});
+      // Fetch active bids - handle cases where user might be stored as string or int
+      final String userIdStr = userId.toString();
+      var bids = <Map<String, Map<String, dynamic>>>[];
+      
+      try {
+        bids = await db.mappedResultsQuery('''
+          SELECT * FROM bids 
+          WHERE user_id = @user_id AND status IN ('pending', 'active') 
+          ORDER BY created_at DESC
+        ''', substitutionValues: {'user_id': userIdStr});
+      } catch (e) {
+        print('Error fetching bids, trying with integer ID: $e');
+        // Fallback to try with integer ID if the string lookup fails
+        bids = await db.mappedResultsQuery('''
+          SELECT * FROM bids 
+          WHERE user_id = @user_id_int AND status IN ('pending', 'active') 
+          ORDER BY created_at DESC
+        ''', substitutionValues: {'user_id_int': userId});
+      }
       
       final activeBids = bids.map((row) => 
         _convertDateTimes(row['bids'] ?? {})
       ).toList();
       
       // Create income breakdown based on monthly income
-      final monthlyIncome = userData['monthly_income'] ?? 0.0;
+      // Ensure we have numeric values by parsing the monthly income explicitly
+      final dynamic rawMonthlyIncome = userData['monthly_income'];
+      final double monthlyIncome = (rawMonthlyIncome is num) 
+          ? rawMonthlyIncome.toDouble() 
+          : double.tryParse(rawMonthlyIncome?.toString() ?? '0') ?? 0.0;
+      
+      // Safely calculate income breakdown with guards against division by zero
       final incomeBreakdown = {
         'second': monthlyIncome / (30 * 24 * 60 * 60),
         'minute': monthlyIncome / (30 * 24 * 60),
@@ -1977,10 +2010,10 @@ return Response.ok(jsonEncode(investments), headers: {
       
       // Compile response
       final response = {
-        'total_funds': userData['total_funds'] ?? 0.0,
+        'total_funds': _parseDouble(userData['total_funds']),
         'monthly_income': monthlyIncome,
-        'total_bids': userData['total_bids'] ?? 0.0,
-        'total_interests': userData['total_interests'] ?? 0.0,
+        'total_bids': _parseDouble(userData['total_bids']),
+        'total_interests': _parseDouble(userData['total_interests']),
         'recent_transactions': recentTransactions,
         'active_bids': activeBids,
         'income_breakdown': incomeBreakdown,
