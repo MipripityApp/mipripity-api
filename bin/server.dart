@@ -243,44 +243,42 @@ class Investment {
   });
 
   factory Investment.fromJson(Map<String, dynamic> json) {
-  return Investment(
-    id: json['id'],
-    title: json['title'],
-    location: json['location'],
-    description: json['description'],
-    realtorName: json['realtorName'],
-    realtorImage: json['realtorImage'],
-    minInvestment: json['minInvestment'],
-    expectedReturn: json['expectedReturn'],
-    duration: json['duration'],
-    investors: json['investors'],
-    remainingAmount: json['remainingAmount'],
-    totalAmount: json['totalAmount'],
-    images: (json['images'] as List).map((e) => e.toString()).toList(),
-    features: (json['features'] as List).map((e) => e.toString()).toList(),
-  );
-}
+    return Investment(
+      id: json['id'],
+      title: json['title'],
+      location: json['location'],
+      description: json['description'],
+      realtorName: json['realtorName'],
+      realtorImage: json['realtorImage'],
+      minInvestment: json['minInvestment'],
+      expectedReturn: json['expectedReturn'],
+      duration: json['duration'],
+      investors: json['investors'],
+      remainingAmount: json['remainingAmount'],
+      totalAmount: json['totalAmount'],
+      images: (json['images'] as List).map((e) => e.toString()).toList(),
+      features: (json['features'] as List).map((e) => e.toString()).toList(),
+    );
+  }
 
-
-Map<String, dynamic> toJson() {
-  return {
-    'id': id,
-    'title': title,
-    'location': location,
-    'description': description,
-    'realtorName': realtorName,
-    'realtorImage': realtorImage,
-    'minInvestment': minInvestment,
-    'expectedReturn': expectedReturn,
-    'duration': duration,
-    'investors': investors,
-    'remainingAmount': remainingAmount,
-    'totalAmount': totalAmount,
-    'images': images,
-    'features': features,
-  };
-}
-
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'title': title,
+      'location': location,
+      'description': description,
+      'realtorName': realtorName,
+      'realtorImage': realtorImage,
+      'minInvestment': minInvestment,
+      'expectedReturn': expectedReturn,
+      'duration': duration,
+      'investors': investors,
+      'remainingAmount': remainingAmount,
+      'totalAmount': totalAmount,
+      'images': images,
+      'features': features,
+    };
+  }
 }
 
 // Paystack API handler functions
@@ -1838,8 +1836,48 @@ return Response.ok(jsonEncode(investments), headers: {
     }
   });
 
-  // Update the database schema to include new agency verification fields
+  // Create necessary tables for user dashboard
   try {
+    // Check if financial_data table exists
+    final financialTableExists = await db.mappedResultsQuery("""
+      SELECT table_name 
+      FROM information_schema.tables 
+      WHERE table_name = 'user_financial_data'
+    """);
+
+    if (financialTableExists.isEmpty) {
+      // Create user_financial_data table
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS user_financial_data (
+          id SERIAL PRIMARY KEY,
+          user_id INTEGER NOT NULL REFERENCES users(id),
+          monthly_income DECIMAL(15, 2) DEFAULT 0,
+          total_funds DECIMAL(15, 2) DEFAULT 0,
+          total_bids DECIMAL(15, 2) DEFAULT 0,
+          total_interests DECIMAL(15, 2) DEFAULT 0,
+          income_breakdown JSONB DEFAULT '{}'::jsonb,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(user_id)
+        )
+      ''');
+      
+      // Create transactions table
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS financial_transactions (
+          id UUID PRIMARY KEY,
+          user_id INTEGER NOT NULL REFERENCES users(id),
+          transaction_type VARCHAR(20) NOT NULL,
+          amount DECIMAL(15, 2) NOT NULL,
+          description TEXT,
+          status VARCHAR(20) DEFAULT 'completed',
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      ''');
+      
+      print('Created financial dashboard tables');
+    }
+    
     // Check if rc_number and official_agency_name columns already exist
     final columnsExist = await db.mappedResultsQuery("""
       SELECT column_name 
@@ -1861,6 +1899,315 @@ return Response.ok(jsonEncode(investments), headers: {
     print('Error updating database schema: $e');
     // Continue anyway, as this is not critical for the API to function
   }
+
+  // User financial dashboard endpoints
+  
+  // GET /users/id/:id/financial-dashboard - Get user's financial dashboard data
+  router.get('/users/id/<id>/financial-dashboard', (Request req, String id) async {
+    try {
+      final userId = int.parse(id);
+      
+      // Check if user exists
+      final userExists = await db.mappedResultsQuery(
+        'SELECT id FROM users WHERE id = @id',
+        substitutionValues: {'id': userId},
+      );
+
+      if (userExists.isEmpty) {
+        return Response.notFound(
+          jsonEncode({'error': 'User not found'}),
+          headers: {'Content-Type': 'application/json'}
+        );
+      }
+      
+      // Get or create financial data
+      var financialData = await db.mappedResultsQuery(
+        'SELECT * FROM user_financial_data WHERE user_id = @user_id',
+        substitutionValues: {'user_id': userId},
+      );
+      
+      if (financialData.isEmpty) {
+        // Create default financial data
+        await db.execute('''
+          INSERT INTO user_financial_data (user_id, monthly_income, total_funds)
+          VALUES (@user_id, 0, 0)
+        ''', substitutionValues: {'user_id': userId});
+        
+        financialData = await db.mappedResultsQuery(
+          'SELECT * FROM user_financial_data WHERE user_id = @user_id',
+          substitutionValues: {'user_id': userId},
+        );
+      }
+      
+      final userData = _convertDateTimes(financialData.first['user_financial_data'] ?? {});
+      
+      // Fetch recent transactions
+      final transactions = await db.mappedResultsQuery('''
+        SELECT * FROM financial_transactions 
+        WHERE user_id = @user_id 
+        ORDER BY created_at DESC LIMIT 5
+      ''', substitutionValues: {'user_id': userId});
+      
+      final recentTransactions = transactions.map((row) => 
+        _convertDateTimes(row['financial_transactions'] ?? {})
+      ).toList();
+      
+      // Fetch active bids
+      final bids = await db.mappedResultsQuery('''
+        SELECT * FROM bids 
+        WHERE user_id = @user_id AND status IN ('pending', 'active') 
+        ORDER BY created_at DESC
+      ''', substitutionValues: {'user_id': userId.toString()});
+      
+      final activeBids = bids.map((row) => 
+        _convertDateTimes(row['bids'] ?? {})
+      ).toList();
+      
+      // Create income breakdown based on monthly income
+      final monthlyIncome = userData['monthly_income'] ?? 0.0;
+      final incomeBreakdown = {
+        'second': monthlyIncome / (30 * 24 * 60 * 60),
+        'minute': monthlyIncome / (30 * 24 * 60),
+        'hour': monthlyIncome / (30 * 24),
+        'day': monthlyIncome / 30,
+        'week': monthlyIncome / 4,
+        'month': monthlyIncome,
+        'year': monthlyIncome * 12,
+      };
+      
+      // Compile response
+      final response = {
+        'total_funds': userData['total_funds'] ?? 0.0,
+        'monthly_income': monthlyIncome,
+        'total_bids': userData['total_bids'] ?? 0.0,
+        'total_interests': userData['total_interests'] ?? 0.0,
+        'recent_transactions': recentTransactions,
+        'active_bids': activeBids,
+        'income_breakdown': incomeBreakdown,
+      };
+      
+      return Response.ok(
+        jsonEncode(response),
+        headers: {'Content-Type': 'application/json'}
+      );
+      
+    } catch (e) {
+      print('Error fetching financial dashboard: $e');
+      return Response.internalServerError(
+        body: jsonEncode({'error': 'Failed to fetch financial dashboard data'}),
+        headers: {'Content-Type': 'application/json'}
+      );
+    }
+  });
+  
+  // PUT /users/id/:id/financial - Update user's financial data
+  router.put('/users/id/<id>/financial', (Request req, String id) async {
+    try {
+      final userId = int.parse(id);
+      final payload = await req.readAsString();
+      final data = jsonDecode(payload);
+      
+      // Check if user exists
+      final userExists = await db.mappedResultsQuery(
+        'SELECT id FROM users WHERE id = @id',
+        substitutionValues: {'id': userId},
+      );
+
+      if (userExists.isEmpty) {
+        return Response.notFound(
+          jsonEncode({'error': 'User not found'}),
+          headers: {'Content-Type': 'application/json'}
+        );
+      }
+      
+      // Check if financial data exists, create if not
+      var financialData = await db.mappedResultsQuery(
+        'SELECT id FROM user_financial_data WHERE user_id = @user_id',
+        substitutionValues: {'user_id': userId},
+      );
+      
+      if (financialData.isEmpty) {
+        await db.execute('''
+          INSERT INTO user_financial_data (user_id)
+          VALUES (@user_id)
+        ''', substitutionValues: {'user_id': userId});
+      }
+      
+      // Build dynamic update query based on provided fields
+      final updateFields = <String>[];
+      final substitutionValues = <String, dynamic>{'user_id': userId};
+      
+      // Valid fields to update
+      final validFields = [
+        'monthly_income', 'total_funds', 'total_bids', 'total_interests',
+        'income_breakdown'
+      ];
+      
+      for (final field in validFields) {
+        if (data.containsKey(field)) {
+          updateFields.add('$field = @$field');
+          
+          if (field == 'income_breakdown' && data[field] is Map) {
+            substitutionValues[field] = jsonEncode(data[field]);
+          } else {
+            substitutionValues[field] = data[field];
+          }
+        }
+      }
+      
+      if (updateFields.isEmpty) {
+        return Response.badRequest(
+          body: jsonEncode({'error': 'No valid fields provided for update'}),
+          headers: {'Content-Type': 'application/json'}
+        );
+      }
+      
+      // Add updated_at timestamp
+      updateFields.add('updated_at = NOW()');
+      
+      final updateQuery = '''
+        UPDATE user_financial_data 
+        SET ${updateFields.join(', ')} 
+        WHERE user_id = @user_id
+      ''';
+      
+      await db.execute(updateQuery, substitutionValues: substitutionValues);
+      
+      // Get updated financial data
+      final updatedData = await db.mappedResultsQuery(
+        'SELECT * FROM user_financial_data WHERE user_id = @user_id',
+        substitutionValues: {'user_id': userId},
+      );
+      
+      if (updatedData.isEmpty) {
+        return Response.internalServerError(
+          body: jsonEncode({'error': 'Failed to fetch updated financial data'}),
+          headers: {'Content-Type': 'application/json'}
+        );
+      }
+      
+      final result = _convertDateTimes(updatedData.first['user_financial_data'] ?? {});
+      
+      return Response.ok(
+        jsonEncode({
+          'success': true,
+          'data': result,
+          'message': 'Financial data updated successfully'
+        }),
+        headers: {'Content-Type': 'application/json'}
+      );
+      
+    } catch (e) {
+      print('Error updating financial data: $e');
+      return Response.internalServerError(
+        body: jsonEncode({'error': 'Failed to update financial data'}),
+        headers: {'Content-Type': 'application/json'}
+      );
+    }
+  });
+  
+  // POST /users/id/:id/transactions - Record a new financial transaction
+  router.post('/users/id/<id>/transactions', (Request req, String id) async {
+    try {
+      final userId = int.parse(id);
+      final payload = await req.readAsString();
+      final data = jsonDecode(payload);
+      
+      // Validate required fields
+      if (data['amount'] == null || data['transaction_type'] == null) {
+        return Response.badRequest(
+          body: jsonEncode({'error': 'Missing required fields: amount, transaction_type'}),
+          headers: {'Content-Type': 'application/json'}
+        );
+      }
+      
+      // Check if user exists
+      final userExists = await db.mappedResultsQuery(
+        'SELECT id FROM users WHERE id = @id',
+        substitutionValues: {'id': userId},
+      );
+
+      if (userExists.isEmpty) {
+        return Response.notFound(
+          jsonEncode({'error': 'User not found'}),
+          headers: {'Content-Type': 'application/json'}
+        );
+      }
+      
+      // Generate transaction ID
+      final uuid = Uuid();
+      final transactionId = uuid.v4();
+      
+      // Insert transaction
+      await db.execute('''
+        INSERT INTO financial_transactions (
+          id, user_id, transaction_type, amount, description, status, created_at
+        ) VALUES (
+          @id, @user_id, @transaction_type, @amount, @description, @status, @created_at
+        )
+      ''', substitutionValues: {
+        'id': transactionId,
+        'user_id': userId,
+        'transaction_type': data['transaction_type'],
+        'amount': data['amount'],
+        'description': data['description'] ?? '',
+        'status': data['status'] ?? 'completed',
+        'created_at': data['created_at'] ?? DateTime.now().toIso8601String(),
+      });
+      
+      // Update user financial data based on transaction type
+      if (data['transaction_type'] == 'credit') {
+        await db.execute('''
+          UPDATE user_financial_data
+          SET total_funds = total_funds + @amount
+          WHERE user_id = @user_id
+        ''', substitutionValues: {
+          'user_id': userId,
+          'amount': data['amount'],
+        });
+      } else if (data['transaction_type'] == 'debit') {
+        await db.execute('''
+          UPDATE user_financial_data
+          SET total_funds = total_funds - @amount
+          WHERE user_id = @user_id
+        ''', substitutionValues: {
+          'user_id': userId,
+          'amount': data['amount'],
+        });
+      }
+      
+      // Get the created transaction
+      final result = await db.mappedResultsQuery(
+        'SELECT * FROM financial_transactions WHERE id = @id',
+        substitutionValues: {'id': transactionId},
+      );
+      
+      if (result.isEmpty) {
+        return Response.internalServerError(
+          body: jsonEncode({'error': 'Failed to fetch created transaction'}),
+          headers: {'Content-Type': 'application/json'}
+        );
+      }
+      
+      final transaction = _convertDateTimes(result.first['financial_transactions'] ?? {});
+      
+      return Response.ok(
+        jsonEncode({
+          'success': true,
+          'transaction': transaction,
+          'message': 'Transaction recorded successfully'
+        }),
+        headers: {'Content-Type': 'application/json'}
+      );
+      
+    } catch (e) {
+      print('Error recording transaction: $e');
+      return Response.internalServerError(
+        body: jsonEncode({'error': 'Failed to record transaction'}),
+        headers: {'Content-Type': 'application/json'}
+      );
+    }
+  });
 
   // Handle 404 routes
   router.all('/<ignored|.*>', (Request req) {
