@@ -6,6 +6,7 @@ import 'package:shelf/shelf_io.dart';
 import 'package:shelf_router/shelf_router.dart';
 import 'package:postgres/postgres.dart';
 import 'package:mipripity_api/database_helper.dart';
+import 'package:mipripity_api/cac_verification.dart'; // Import CAC verification handler
 import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
 import 'package:mime/mime.dart';
@@ -28,7 +29,7 @@ class Bid {
   final String listingLocation;
   final double listingPrice;
   final double bidAmount;
-  final String status;
+  final String status; // 'pending', 'accepted', 'rejected', 'expired', 'withdrawn'
   final String createdAt;
   final String? responseMessage;
   final String? responseDate;
@@ -58,11 +59,11 @@ class Bid {
       listingImage: json['listing_image'] ?? '',
       listingCategory: json['listing_category'] ?? '',
       listingLocation: json['listing_location'] ?? '',
-      listingPrice: (json['listing_price'] is num)
-          ? (json['listing_price'] as num).toDouble()
+      listingPrice: (json['listing_price'] is num) 
+          ? (json['listing_price'] as num).toDouble() 
           : double.tryParse(json['listing_price']?.toString() ?? '0') ?? 0.0,
-      bidAmount: (json['bid_amount'] is num)
-          ? (json['bid_amount'] as num).toDouble()
+      bidAmount: (json['bid_amount'] is num) 
+          ? (json['bid_amount'] as num).toDouble() 
           : double.tryParse(json['bid_amount']?.toString() ?? '0') ?? 0.0,
       status: json['status'] ?? 'pending',
       createdAt: json['created_at'] ?? DateTime.now().toIso8601String(),
@@ -91,13 +92,13 @@ class Bid {
   }
 }
 
-// Model for Poll Property
+// Model for Poll Property - properties users can vote on suggested uses
 class PollProperty {
   final String id;
   final String title;
   final String location;
   final String imageUrl;
-  final List<Map<String, dynamic>> suggestions;
+  final List<Map<String, dynamic>> suggestions; // Each suggestion has name and votes
 
   PollProperty({
     required this.id,
@@ -111,6 +112,7 @@ class PollProperty {
     final suggestionsList = (json['suggestions'] as List)
         .map((suggestion) => suggestion as Map<String, dynamic>)
         .toList();
+
     return PollProperty(
       id: json['id'],
       title: json['title'],
@@ -127,79 +129,6 @@ class PollProperty {
       'location': location,
       'image_url': imageUrl,
       'suggestions': suggestions,
-    };
-  }
-}
-
-// Investment Model
-class Investment {
-  final String id;
-  final String title;
-  final String location;
-  final String description;
-  final String realtorName;
-  final String realtorImage;
-  final int minInvestment;
-  final String expectedReturn;
-  final String duration;
-  final int investors;
-  final int remainingAmount;
-  final int totalAmount;
-  final List<String> images;
-  final List<String> features;
-
-  Investment({
-    required this.id,
-    required this.title,
-    required this.location,
-    required this.description,
-    required this.realtorName,
-    required this.realtorImage,
-    required this.minInvestment,
-    required this.expectedReturn,
-    required this.duration,
-    required this.investors,
-    required this.remainingAmount,
-    required this.totalAmount,
-    required this.images,
-    required this.features,
-  });
-
-  factory Investment.fromJson(Map<String, dynamic> json) {
-    return Investment(
-      id: json['id'],
-      title: json['title'],
-      location: json['location'],
-      description: json['description'],
-      realtorName: json['realtorName'],
-      realtorImage: json['realtorImage'],
-      minInvestment: json['minInvestment'],
-      expectedReturn: json['expectedReturn'],
-      duration: json['duration'],
-      investors: json['investors'],
-      remainingAmount: json['remainingAmount'],
-      totalAmount: json['totalAmount'],
-      images: (json['images'] as List).map((e) => e.toString()).toList(),
-      features: (json['features'] as List).map((e) => e.toString()).toList(),
-    );
-  }
-
-  Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'title': title,
-      'location': location,
-      'description': description,
-      'realtorName': realtorName,
-      'realtorImage': realtorImage,
-      'minInvestment': minInvestment,
-      'expectedReturn': expectedReturn,
-      'duration': duration,
-      'investors': investors,
-      'remainingAmount': remainingAmount,
-      'totalAmount': totalAmount,
-      'images': images,
-      'features': features,
     };
   }
 }
@@ -269,6 +198,7 @@ Future<Response> handlePostProperty(Request request, PostgreSQLConnection connec
     return Response.ok(jsonEncode({'status': 'success', 'message': 'Property created successfully'}), headers: {
       'Content-Type': 'application/json',
     });
+
   } catch (e, stack) {
     print('POST /properties failed: $e\n$stack');
     return Response.internalServerError(body: jsonEncode({
@@ -279,14 +209,89 @@ Future<Response> handlePostProperty(Request request, PostgreSQLConnection connec
   }
 }
 
+class Investment {
+  final String id;
+  final String title;
+  final String location;
+  final String description;
+  final String realtorName;
+  final String realtorImage;
+  final int minInvestment;
+  final String expectedReturn;
+  final String duration;
+  final int investors;
+  final int remainingAmount;
+  final int totalAmount;
+  final List<String> images;   
+  final List<String> features;  
+
+  Investment({
+    required this.id,
+    required this.title,
+    required this.location,
+    required this.description,
+    required this.realtorName,
+    required this.realtorImage,
+    required this.minInvestment,
+    required this.expectedReturn,
+    required this.duration,
+    required this.investors,
+    required this.remainingAmount,
+    required this.totalAmount,
+    required this.images,
+    required this.features,
+  });
+
+  factory Investment.fromJson(Map<String, dynamic> json) {
+    return Investment(
+      id: json['id'],
+      title: json['title'],
+      location: json['location'],
+      description: json['description'],
+      realtorName: json['realtorName'],
+      realtorImage: json['realtorImage'],
+      minInvestment: json['minInvestment'],
+      expectedReturn: json['expectedReturn'],
+      duration: json['duration'],
+      investors: json['investors'],
+      remainingAmount: json['remainingAmount'],
+      totalAmount: json['totalAmount'],
+      images: (json['images'] as List).map((e) => e.toString()).toList(),
+      features: (json['features'] as List).map((e) => e.toString()).toList(),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'title': title,
+      'location': location,
+      'description': description,
+      'realtorName': realtorName,
+      'realtorImage': realtorImage,
+      'minInvestment': minInvestment,
+      'expectedReturn': expectedReturn,
+      'duration': duration,
+      'investors': investors,
+      'remainingAmount': remainingAmount,
+      'totalAmount': totalAmount,
+      'images': images,
+      'features': features,
+    };
+  }
+}
+
 // Paystack API handler functions
 Future<Response> handlePaystackInitialize(Request request) async {
   try {
+    // Get Paystack secret key from environment variables (for security)
     final paystackSecretKey = Platform.environment['PAYSTACK_SECRET_KEY'] ?? 'sk_live_fe4415cf99c999fb2b731f8991c94e548421aa90';
     
+    // Read request body
     final payload = await request.readAsString();
     final requestData = jsonDecode(payload);
     
+    // Validate required fields
     if (requestData['email'] == null || requestData['amount'] == null) {
       return Response.badRequest(
         body: jsonEncode({'error': 'Email and amount are required'}),
@@ -294,6 +299,7 @@ Future<Response> handlePaystackInitialize(Request request) async {
       );
     }
     
+    // Prepare data for Paystack API
     final Map<String, dynamic> paystackData = {
       'email': requestData['email'],
       'amount': requestData['amount'],
@@ -302,10 +308,12 @@ Future<Response> handlePaystackInitialize(Request request) async {
       'callback_url': requestData['callback_url'] ?? 'https://mipripity-api-1.onrender.com/webhook',
     };
     
+    // Add metadata if provided
     if (requestData['metadata'] != null) {
       paystackData['metadata'] = requestData['metadata'];
     }
     
+    // Initialize transaction with Paystack API
     final response = await http.post(
       Uri.parse('https://api.paystack.co/transaction/initialize'),
       headers: {
@@ -315,9 +323,11 @@ Future<Response> handlePaystackInitialize(Request request) async {
       body: jsonEncode(paystackData),
     );
     
+    // Parse response
     final responseData = jsonDecode(response.body);
     
     if (response.statusCode == 200) {
+      // Return success with authorization URL
       return Response.ok(
         jsonEncode({
           'authorization_url': responseData['data']['authorization_url'],
@@ -327,6 +337,7 @@ Future<Response> handlePaystackInitialize(Request request) async {
         headers: {'Content-Type': 'application/json'},
       );
     } else {
+      // Return error
       return Response(
         response.statusCode,
         body: jsonEncode({
@@ -346,11 +357,14 @@ Future<Response> handlePaystackInitialize(Request request) async {
 
 Future<Response> handlePaystackVerify(Request request) async {
   try {
+    // Get Paystack secret key from environment variables (for security)
     final paystackSecretKey = Platform.environment['PAYSTACK_SECRET_KEY'] ?? 'sk_live_fe4415cf99c999fb2b731f8991c94e548421aa90';
     
+    // Read request body
     final payload = await request.readAsString();
     final requestData = jsonDecode(payload);
     
+    // Validate required fields
     if (requestData['reference'] == null) {
       return Response.badRequest(
         body: jsonEncode({'error': 'Transaction reference is required'}),
@@ -360,6 +374,7 @@ Future<Response> handlePaystackVerify(Request request) async {
     
     final reference = requestData['reference'];
     
+    // Verify transaction with Paystack API
     final response = await http.get(
       Uri.parse('https://api.paystack.co/transaction/verify/$reference'),
       headers: {
@@ -368,20 +383,28 @@ Future<Response> handlePaystackVerify(Request request) async {
       },
     );
     
+    // Parse response
     final responseData = jsonDecode(response.body);
     
     if (response.statusCode == 200) {
+      // Check if transaction was successful
       final status = responseData['data']['status'];
       final isSuccess = status == 'success';
       
+      // Log transaction information (optional)
       if (isSuccess) {
+        // Here you could store the transaction in your database
+        // Or perform other actions based on the payment
         print('Payment successful: $reference');
         
+        // If property_id is provided, update property with payment information
         if (requestData['property_id'] != null) {
+          // You could implement property-specific logic here
           print('Payment for property: ${requestData['property_id']}');
         }
       }
       
+      // Return verification result
       return Response.ok(
         jsonEncode({
           'verified': isSuccess,
@@ -393,6 +416,7 @@ Future<Response> handlePaystackVerify(Request request) async {
         headers: {'Content-Type': 'application/json'},
       );
     } else {
+      // Return error
       return Response(
         response.statusCode,
         body: jsonEncode({
@@ -410,31 +434,43 @@ Future<Response> handlePaystackVerify(Request request) async {
   }
 }
 
+// Webhook handler for Paystack callbacks
 Future<Response> handlePaystackWebhook(Request request) async {
   try {
+    // Get Paystack secret key from environment variables (for security)
     final paystackSecretKey = Platform.environment['PAYSTACK_SECRET_KEY'] ?? 'sk_live_fe4415cf99c999fb2b731f8991c94e548421aa90';
     
+    // Verify Paystack signature if provided (for production)
     final signature = request.headers['x-paystack-signature'];
+    
+    // Read request body
     final payload = await request.readAsString();
     final eventData = jsonDecode(payload);
     
+    // Extract event information
     final event = eventData['event'];
     
     if (event == 'charge.success') {
+      // Handle successful payment
       final data = eventData['data'];
       final reference = data['reference'];
       final amount = data['amount'];
       final status = data['status'];
       
       print('Webhook: Successful payment - Reference: $reference, Amount: $amount, Status: $status');
+      
+      // Here you could update your database or trigger other actions
+      // based on the successful payment
     }
     
+    // Always return 200 OK to acknowledge receipt of webhook
     return Response.ok(
       jsonEncode({'status': 'success'}),
       headers: {'Content-Type': 'application/json'},
     );
   } catch (e) {
     print('Paystack webhook error: $e');
+    // Still return 200 OK to prevent Paystack from retrying
     return Response.ok(
       jsonEncode({'status': 'error', 'message': 'Error processing webhook'}),
       headers: {'Content-Type': 'application/json'},
@@ -442,290 +478,1169 @@ Future<Response> handlePaystackWebhook(Request request) async {
   }
 }
 
-// Image upload handler for Cloudinary with Replicate Real-ESRGAN enhancement
-Future<Response> handleUploadImage(Request request) async {
-  try {
-    final boundary = request.headers['content-type']?.split('boundary=').last;
-    if (boundary == null) {
-      return Response.badRequest(body: jsonEncode({'error': 'No boundary found in content-type'}));
-    }
-    
-    final transformer = MimeMultipartTransformer(boundary);
-    final parts = await transformer.bind(request.read()).toList();
+void main() async {
+  PostgreSQLConnection db;
 
-    for (final part in parts) {
-      final contentDisposition = part.headers['content-disposition'];
-      if (contentDisposition != null && contentDisposition.contains('filename=')) {
-        final fileBytes = await part.toList();
-        final fullBytes = fileBytes.expand((e) => e).toList();
-        
-        // Step 1: Upload to Cloudinary temporarily
-        final cloudinaryUploadUri = Uri.parse('https://api.cloudinary.com/v1_1/dxhrlaz6j/image/upload');
-        final cloudinaryUpload = http.MultipartRequest('POST', cloudinaryUploadUri)
-          ..fields['upload_preset'] = 'mipripity'
-          ..files.add(http.MultipartFile.fromBytes('file', fullBytes, filename: 'original.jpg'));
-        
-        final cloudinaryResponse = await cloudinaryUpload.send();
-        final cloudinaryResult = await cloudinaryResponse.stream.bytesToString();
-        final cloudinaryData = jsonDecode(cloudinaryResult);
-        final originalImageUrl = cloudinaryData['secure_url'];
-        
-        if (originalImageUrl == null) {
-          return Response.internalServerError(body: jsonEncode({'error': 'Cloudinary upload failed'}));
-        }
-
-        // Step 2: Enhance with Replicate Real-ESRGAN
-        final replicateToken = 'Token r8_Q5kyvZPZ5Q0c1oyFB1W8MxLvSgK1PmH0ubyMd';
-        final replicateResponse = await http.post(
-          Uri.parse('https://api.replicate.com/v1/predictions'),
-          headers: {
-            'Authorization': replicateToken,
-            'Content-Type': 'application/json',
-          },
-          body: jsonEncode({
-            'version': 'db21e45a3f647123bfdfdfb503e6c43c20404983c5d3c99c06a2c7a7afcddb6c',
-            'input': {
-              'image': originalImageUrl,
-              'scale': 2
-            },
-          }),
-        );
-
-        if (replicateResponse.statusCode != 201) {
-          return Response.internalServerError(body: replicateResponse.body);
-        }
-
-        final replicateData = jsonDecode(replicateResponse.body);
-        final getResultUrl = replicateData['urls']['get'];
-
-        // Step 3: Poll Replicate until enhancement completes
-        for (int i = 0; i < 10; i++) {
-          final statusResponse = await http.get(
-            Uri.parse(getResultUrl),
-            headers: {'Authorization': replicateToken},
-          );
-          final statusData = jsonDecode(statusResponse.body);
-          
-          if (statusData['status'] == 'succeeded') {
-            final enhancedImageUrl = statusData['output'];
-            return Response.ok(jsonEncode({
-              'status': 'success',
-              'url': enhancedImageUrl,
-            }), headers: {'Content-Type': 'application/json'});
-          }
-          await Future.delayed(Duration(seconds: 2));
-        }
-
-        return Response.internalServerError(body: jsonEncode({'error': 'Replicate enhancement timed out'}));
-      }
-    }
-
-    return Response.badRequest(body: jsonEncode({'error': 'No file found'}));
-  } catch (e) {
-    return Response.internalServerError(body: jsonEncode({'error': e.toString()}));
-  }
-}
-
-// Database migrations function
-Future<void> _applyMigrations() async {
-  PostgreSQLConnection? db;
   try {
     db = await DatabaseHelper.connect();
-    print('Connected to database successfully for migrations');
-
-    // Create poll_properties table
-    await db.execute('''
-      CREATE TABLE IF NOT EXISTS poll_properties (
-        id TEXT PRIMARY KEY,
-        title TEXT NOT NULL,
-        location TEXT NOT NULL,
-        image_url TEXT NOT NULL,
-        suggestions JSONB DEFAULT '[]'::jsonb,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        poll_user_votes JSONB DEFAULT '[]'::jsonb,
-        poll_suggestions JSONB DEFAULT '[]'::jsonb
-      )
-    ''');
-
-    // Create poll_suggestions table
-    await db.execute('''
-      CREATE TABLE IF NOT EXISTS poll_suggestions (
-        id UUID PRIMARY KEY,
-        poll_property_id UUID,
-        suggestion TEXT NOT NULL,
-        votes INTEGER DEFAULT 0,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    ''');
-
-    // Create poll_user_votes table
-    await db.execute('''
-      CREATE TABLE IF NOT EXISTS poll_user_votes (
-        id UUID PRIMARY KEY,
-        user_id TEXT NOT NULL,
-        suggestion TEXT NOT NULL,
-        poll_property_id UUID,
-        voted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    ''');
-
-    // Create bids table
-    await db.execute('''
-      CREATE TABLE IF NOT EXISTS bids (
-        id TEXT PRIMARY KEY,
-        listing_id TEXT NOT NULL,
-        listing_title TEXT NOT NULL,
-        listing_image TEXT NOT NULL,
-        listing_category TEXT NOT NULL,
-        listing_location TEXT NOT NULL,
-        listing_price REAL NOT NULL,
-        bid_amount REAL NOT NULL,
-        status TEXT NOT NULL DEFAULT 'pending',
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        response_message TEXT,
-        response_date TIMESTAMP,
-        user_id TEXT NOT NULL
-      )
-    ''');
-
-    // Check if financial_data table exists
-    final financialTableExists = await db.mappedResultsQuery("""
-      SELECT table_name 
-      FROM information_schema.tables 
-      WHERE table_name = 'user_financial_data'
-    """);
+    print('Connected to database successfully using configuration from pubspec.yaml');
     
-    if (financialTableExists.isEmpty) {
-      // Create user_financial_data table with income_start_timestamp
-      await db.execute('''
-        CREATE TABLE IF NOT EXISTS user_financial_data (
-          id SERIAL PRIMARY KEY,
-          user_id INTEGER NOT NULL REFERENCES users(id),
-          monthly_income DECIMAL(15, 2) DEFAULT 0,
-          income_start_timestamp TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-          total_funds DECIMAL(15, 2) DEFAULT 0,
-          total_bids DECIMAL(15, 2) DEFAULT 0,
-          total_interests DECIMAL(15, 2) DEFAULT 0,
-          income_breakdown JSONB DEFAULT '{}'::jsonb,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          UNIQUE(user_id)
-        )
-      ''');
-      print('Created user_financial_data table with income_start_timestamp');
-    } else {
-      // Check if income_start_timestamp column exists, add it if it doesn't
-      final timestampExists = await db.mappedResultsQuery("""
-        SELECT column_name 
-        FROM information_schema.columns 
-        WHERE table_name = 'user_financial_data'
-          AND column_name = 'income_start_timestamp'
-      """);
-      
-      if (timestampExists.isEmpty) {
+    // Create poll_properties table if it doesn't exist
+      try {
+        // Create poll_properties table exactly as described by the schema
         await db.execute('''
-          ALTER TABLE user_financial_data 
-          ADD COLUMN income_start_timestamp TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+          CREATE TABLE IF NOT EXISTS poll_properties (
+            id TEXT PRIMARY KEY,
+            title TEXT NOT NULL,
+            location TEXT NOT NULL,
+            image_url TEXT NOT NULL,
+            suggestions JSONB DEFAULT '[]'::jsonb,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            poll_user_votes JSONB DEFAULT '[]'::jsonb,
+            poll_suggestions JSONB DEFAULT '[]'::jsonb
+          )
         ''');
-        print('Added income_start_timestamp column to user_financial_data table');
+        
+        // Create poll_suggestions table if it doesn't exist
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS poll_suggestions (
+            id UUID PRIMARY KEY,
+            poll_property_id UUID,
+            suggestion TEXT NOT NULL,
+            votes INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          )
+        ''');
+        
+        // Create poll_user_votes table if it doesn't exist
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS poll_user_votes (
+            id UUID PRIMARY KEY,
+            user_id TEXT NOT NULL,
+            suggestion TEXT NOT NULL,
+            poll_property_id UUID,
+            voted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          )
+        ''');
+        
+        // Create bids table if it doesn't exist
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS bids (
+            id TEXT PRIMARY KEY,
+            listing_id TEXT NOT NULL,
+            listing_title TEXT NOT NULL,
+            listing_image TEXT NOT NULL,
+            listing_category TEXT NOT NULL,
+            listing_location TEXT NOT NULL,
+            listing_price REAL NOT NULL,
+            bid_amount REAL NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            response_message TEXT,
+            response_date TIMESTAMP,
+            user_id TEXT NOT NULL
+          )
+        ''');
+        
+        print('Database tables created successfully');
+    } catch (e) {
+      print('Error creating poll properties tables: $e');
+      // Continue anyway as this is not critical for the API to function
+    }
+  } catch (e) {
+    print('Failed to connect to the database: $e');
+    exit(1);
+  }
+
+  // Image upload handler for Cloudinary with Replicate Real-ESRGAN enhancement
+  Future<Response> handleUploadImage(Request request) async {
+    try {
+      final boundary = request.headers['content-type']?.split('boundary=').last;
+      final transformer = MimeMultipartTransformer(boundary!);
+      final parts = await transformer.bind(request.read()).toList();
+
+      for (final part in parts) {
+        final contentDisposition = part.headers['content-disposition'];
+        if (contentDisposition != null && contentDisposition.contains('filename=')) {
+          final fileBytes = await part.toList();
+          final fullBytes = fileBytes.expand((e) => e).toList();
+
+          // Step 1: Upload to Cloudinary temporarily
+          final cloudinaryUploadUri = Uri.parse('https://api.cloudinary.com/v1_1/dxhrlaz6j/image/upload');
+          final cloudinaryUpload = http.MultipartRequest('POST', cloudinaryUploadUri)
+            ..fields['upload_preset'] = 'mipripity'
+            ..files.add(http.MultipartFile.fromBytes('file', fullBytes, filename: 'original.jpg'));
+
+          final cloudinaryResponse = await cloudinaryUpload.send();
+          final cloudinaryResult = await cloudinaryResponse.stream.bytesToString();
+          final cloudinaryData = jsonDecode(cloudinaryResult);
+          final originalImageUrl = cloudinaryData['secure_url'];
+
+          if (originalImageUrl == null) {
+            return Response.internalServerError(body: jsonEncode({'error': 'Cloudinary upload failed'}));
+          }
+
+          // Step 2: Enhance with Replicate Real-ESRGAN
+          final replicateToken = 'Token r8_Q5kyvZPZ5Q0c1oyFB1W8MxLvSgK1PmH0ubyMd';
+          final replicateResponse = await http.post(
+            Uri.parse('https://api.replicate.com/v1/predictions'),
+            headers: {
+              'Authorization': replicateToken,
+              'Content-Type': 'application/json',
+            },
+            body: jsonEncode({
+              'version': 'db21e45a3f647123bfdfdfb503e6c43c20404983c5d3c99c06a2c7a7afcddb6c',
+              'input': {
+                'image': originalImageUrl,
+                'scale': 2
+              },
+            }),
+          );
+
+          if (replicateResponse.statusCode != 201) {
+            return Response.internalServerError(body: replicateResponse.body);
+          }
+
+          final replicateData = jsonDecode(replicateResponse.body);
+          final getResultUrl = replicateData['urls']['get'];
+
+          // Step 3: Poll Replicate until enhancement completes
+          for (int i = 0; i < 10; i++) {
+            final statusResponse = await http.get(
+              Uri.parse(getResultUrl),
+              headers: {'Authorization': replicateToken},
+            );
+            final statusData = jsonDecode(statusResponse.body);
+
+            if (statusData['status'] == 'succeeded') {
+              final enhancedImageUrl = statusData['output'];
+              return Response.ok(jsonEncode({
+                'status': 'success',
+                'url': enhancedImageUrl,
+              }), headers: {'Content-Type': 'application/json'});
+            }
+
+            await Future.delayed(Duration(seconds: 2));
+          }
+
+          return Response.internalServerError(body: jsonEncode({'error': 'Replicate enhancement timed out'}));
+        }
+      }
+
+      return Response.badRequest(body: jsonEncode({'error': 'No file found'}));
+    } catch (e) {
+      return Response.internalServerError(body: jsonEncode({'error': e.toString()}));
+    }
+  }
+
+  final router = Router();
+  
+  // Register Paystack endpoints
+  router.post('/paystack/initialize', handlePaystackInitialize);
+  router.post('/paystack/verify', handlePaystackVerify);
+  router.post('/webhook', handlePaystackWebhook);
+
+  router.get('/', (Request req) async {
+    return Response.ok('Mipripity API is running');
+  });
+  
+  // Register the upload endpoints
+  // GET handler returns a simple HTML form for testing uploads
+  router.get('/upload', (Request request) async {
+    return Response.ok('''
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Mipripity Image Upload</title>
+          <style>
+            body { font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; }
+            h1 { color: #333; }
+            form { margin-top: 20px; border: 1px solid #ddd; padding: 20px; border-radius: 5px; }
+            input[type=file] { margin: 10px 0; }
+            button { background: #4CAF50; color: white; border: none; padding: 10px 15px; border-radius: 4px; cursor: pointer; }
+            button:hover { background: #45a049; }
+          </style>
+        </head>
+        <body>
+          <h1>Mipripity Image Upload</h1>
+          <p>Use this form to test the image upload API, or use the POST endpoint programmatically.</p>
+          <form action="/upload" method="post" enctype="multipart/form-data">
+            <div>
+              <label for="file">Select image to upload:</label><br>
+              <input type="file" id="file" name="file" accept="image/*">
+            </div>
+            <button type="submit">Upload Image</button>
+          </form>
+        </body>
+      </html>
+    ''', headers: {'Content-Type': 'text/html'});
+  });
+  
+  // POST handler processes the image upload
+  router.post('/upload', (Request request) async {
+    return await handleUploadImage(request);
+  });
+  
+  // Helper to convert DateTime fields to string
+  Map<String, dynamic> _convertDateTimes(Map<String, dynamic> map) {
+    final result = <String, dynamic>{};
+    map.forEach((key, value) {
+      if (value is DateTime) {
+        result[key] = value.toIso8601String();
+      } else {
+        result[key] = value;
+      }
+    });
+    return result;
+  }
+
+  // Get all users (admin endpoint)
+  router.get('/users', (Request req) async {
+    final results = await db.query('SELECT id, email, first_name, last_name, phone_number, whatsapp_link, avatar_url, account_status, created_at, last_login FROM users');
+    final users = results.map((row) => _convertDateTimes(row.toColumnMap())).toList();
+    return Response.ok(jsonEncode(users), headers: {'Content-Type': 'application/json'});
+  });
+
+  // Register user
+  router.post('/users', (Request req) async {
+    final payload = await req.readAsString();
+    final data = jsonDecode(payload);
+
+    // Validate required fields
+    if (data['email'] == null || data['password'] == null) {
+      return Response(400, body: jsonEncode({'error': 'Email and password required'}), headers: {'Content-Type': 'application/json'});
+    }
+
+    // Check if user already exists
+    final existing = await db.mappedResultsQuery('SELECT * FROM users WHERE email = @e', substitutionValues: {'e': data['email']});
+    if (existing.isNotEmpty) {
+      return Response(409, body: jsonEncode({'error': 'User already exists'}), headers: {'Content-Type': 'application/json'});
+    }
+
+    final hashedPassword = hashPassword(data['password']);
+
+    final result = await db.query(
+      'INSERT INTO users (email, password, first_name, last_name, phone_number, whatsapp_link) VALUES (@e, @p, @f, @l, @ph, @w) RETURNING id, email, first_name, last_name, phone_number, whatsapp_link',
+      substitutionValues: {
+        'e': data['email'],
+        'p': hashedPassword,
+        'f': data['first_name'],
+        'l': data['last_name'],
+        'ph': data['phone_number'],
+        'w': data['whatsapp_link'],
+      },
+    );
+
+    final user = result.first.toColumnMap();
+    return Response.ok(jsonEncode({'success': true, 'user': user}), headers: {'Content-Type': 'application/json'});
+  });
+
+  // Login user
+  router.post('/auth/login', (Request req) async {
+    try {
+      final payload = await req.readAsString();
+      final data = jsonDecode(payload);
+
+      // Validate input
+      if (data['email'] == null || data['password'] == null) {
+        return Response(400, 
+          body: jsonEncode({
+            'success': false,
+            'error': 'Email and password are required'
+          }),
+          headers: {'Content-Type': 'application/json'}
+        );
+      }
+
+      final email = data['email'];
+      final password = data['password'];
+
+      final results = await db.mappedResultsQuery(
+        'SELECT * FROM users WHERE email = @e',
+        substitutionValues: {'e': email}
+      );
+
+      if (results.isEmpty) {
+        return Response(401,
+          body: jsonEncode({
+            'success': false,
+            'error': 'Invalid email or password'
+          }),
+          headers: {'Content-Type': 'application/json'}
+        );
+      }
+
+      final user = results.first['users'];
+      if (!verifyPassword(password, user?['password'])) {
+        return Response(401,
+          body: jsonEncode({
+            'success': false,
+            'error': 'Invalid email or password'
+          }),
+          headers: {'Content-Type': 'application/json'}
+        );
+      }
+
+      // Remove sensitive data
+      user?.remove('password');
+      
+      return Response.ok(
+        jsonEncode({
+          'success': true,
+          'user': user
+        }),
+        headers: {'Content-Type': 'application/json'}
+      );
+    } catch (e) {
+      print('Login error: $e');
+      return Response.internalServerError(
+        body: jsonEncode({
+          'success': false,
+          'error': 'An unexpected error occurred'
+        }),
+        headers: {'Content-Type': 'application/json'}
+      );
+    }
+  });
+
+  // Get user by ID - FIXED: More specific route pattern
+  // Get user by ID
+  router.get('/users/id/<id>', (Request req, String id) async {
+    try {
+      final userId = int.parse(id);
+      final results = await db.mappedResultsQuery(
+        '''SELECT id, email, first_name, last_name, phone_number, whatsapp_link, 
+           avatar_url, created_at, last_login, account_status 
+           FROM users WHERE id = @id''',
+        substitutionValues: {'id': userId},
+      );
+      
+      if (results.isEmpty) {
+        return Response.notFound(
+          jsonEncode({'error': 'User not found'}),
+          headers: {'Content-Type': 'application/json'},
+        );
+      }
+
+      final user = _convertDateTimes(results.first['users'] ?? {});
+      return Response.ok(
+        jsonEncode(user),
+        headers: {'Content-Type': 'application/json'},
+      );
+    } catch (e) {
+      print('Get user by ID error: $e');
+      return Response.internalServerError(
+        body: jsonEncode({'error': 'Invalid user ID format or database error'}),
+        headers: {'Content-Type': 'application/json'}
+      );
+    }
+  });
+  
+  // Bids Endpoints
+  // GET /bids - Fetch all bids, with optional user_id filter
+  router.get('/bids', (Request req) async {
+    try {
+      final params = req.url.queryParameters;
+      final userId = params['user_id'];
+      
+      String query = 'SELECT * FROM bids';
+      Map<String, dynamic> substitutionValues = {};
+      
+      if (userId != null && userId.isNotEmpty) {
+        query += ' WHERE user_id = @user_id';
+        substitutionValues['user_id'] = userId;
+      }
+      
+      query += ' ORDER BY created_at DESC';
+      
+      final results = await db.mappedResultsQuery(query, substitutionValues: substitutionValues);
+      
+      final bids = results.map((row) {
+        final bidData = _convertDateTimes(row['bids'] ?? {});
+        return bidData;
+      }).toList();
+      
+      return Response.ok(
+        jsonEncode(bids),
+        headers: {'Content-Type': 'application/json'}
+      );
+    } catch (e) {
+      print('Error fetching bids: $e');
+      return Response.internalServerError(
+        body: jsonEncode({'error': 'Failed to fetch bids: $e'}),
+        headers: {'Content-Type': 'application/json'}
+      );
+    }
+  });
+  
+  // POST /bids - Create a new bid
+  router.post('/bids', (Request req) async {
+    try {
+      final payload = await req.readAsString();
+      final data = jsonDecode(payload);
+      
+      // Validate required fields
+      final requiredFields = [
+        'user_id', 'listing_id', 'listing_title', 'listing_image', 
+        'listing_category', 'listing_location', 'listing_price', 'bid_amount'
+      ];
+      
+      for (final field in requiredFields) {
+        if (data[field] == null) {
+          return Response.badRequest(
+            body: jsonEncode({'error': 'Missing required field: $field'}),
+            headers: {'Content-Type': 'application/json'}
+          );
+        }
+      }
+      
+      // Generate a unique ID for the bid
+      final uuid = Uuid();
+      final id = uuid.v4();
+      
+      // Insert the bid
+      await db.execute('''
+        INSERT INTO bids (
+          id, user_id, listing_id, listing_title, listing_image, 
+          listing_category, listing_location, listing_price, 
+          bid_amount, status, created_at
+        ) VALUES (
+          @id, @user_id, @listing_id, @listing_title, @listing_image, 
+          @listing_category, @listing_location, @listing_price, 
+          @bid_amount, @status, @created_at
+        )
+      ''', substitutionValues: {
+        'id': id,
+        'user_id': data['user_id'],
+        'listing_id': data['listing_id'],
+        'listing_title': data['listing_title'],
+        'listing_image': data['listing_image'],
+        'listing_category': data['listing_category'],
+        'listing_location': data['listing_location'],
+        'listing_price': data['listing_price'],
+        'bid_amount': data['bid_amount'],
+        'status': data['status'] ?? 'pending',
+        'created_at': data['created_at'] ?? DateTime.now().toIso8601String(),
+      });
+      
+      // Fetch the newly created bid
+      final results = await db.mappedResultsQuery(
+        'SELECT * FROM bids WHERE id = @id',
+        substitutionValues: {'id': id}
+      );
+      
+      if (results.isEmpty) {
+        return Response.internalServerError(
+          body: jsonEncode({'error': 'Failed to create bid'}),
+          headers: {'Content-Type': 'application/json'}
+        );
+      }
+      
+      final bid = _convertDateTimes(results.first['bids'] ?? {});
+      
+      return Response.ok(
+        jsonEncode({
+          'success': true,
+          'message': 'Bid created successfully',
+          'bid': bid
+        }),
+        headers: {'Content-Type': 'application/json'}
+      );
+    } catch (e) {
+      print('Error creating bid: $e');
+      return Response.internalServerError(
+        body: jsonEncode({'error': 'Failed to create bid: $e'}),
+        headers: {'Content-Type': 'application/json'}
+      );
+    }
+  });
+  
+  // PUT /bids/:id - Update a bid (amount or status)
+  router.put('/bids/<id>', (Request req, String id) async {
+    try {
+      final payload = await req.readAsString();
+      final data = jsonDecode(payload);
+      
+      // Check if bid exists
+      final existingBid = await db.mappedResultsQuery(
+        'SELECT * FROM bids WHERE id = @id',
+        substitutionValues: {'id': id}
+      );
+      
+      if (existingBid.isEmpty) {
+        return Response.notFound(
+          jsonEncode({'error': 'Bid not found'}),
+          headers: {'Content-Type': 'application/json'}
+        );
+      }
+      
+      // Build dynamic update query based on provided fields
+      final updateFields = <String>[];
+      final substitutionValues = <String, dynamic>{'id': id};
+      
+      // Allowed fields to update
+      final allowedFields = [
+        'bid_amount', 'status', 'response_message', 'response_date'
+      ];
+      
+      for (final field in allowedFields) {
+        if (data.containsKey(field)) {
+          updateFields.add('$field = @$field');
+          substitutionValues[field] = data[field];
+        }
+      }
+      
+      if (updateFields.isEmpty) {
+        return Response.badRequest(
+          body: jsonEncode({'error': 'No valid fields provided for update'}),
+          headers: {'Content-Type': 'application/json'}
+        );
+      }
+      
+      // If updating status to 'accepted' or 'rejected', add response date if not provided
+      if (data.containsKey('status') && 
+          (data['status'] == 'accepted' || data['status'] == 'rejected') && 
+          !data.containsKey('response_date')) {
+        updateFields.add('response_date = @response_date');
+        substitutionValues['response_date'] = DateTime.now().toIso8601String();
+      }
+      
+      final updateQuery = '''
+        UPDATE bids 
+        SET ${updateFields.join(', ')} 
+        WHERE id = @id
+      ''';
+      
+      await db.execute(updateQuery, substitutionValues: substitutionValues);
+      
+      // Fetch and return updated bid
+      final results = await db.mappedResultsQuery(
+        'SELECT * FROM bids WHERE id = @id',
+        substitutionValues: {'id': id}
+      );
+      
+      if (results.isEmpty) {
+        return Response.internalServerError(
+          body: jsonEncode({'error': 'Failed to fetch updated bid'}),
+          headers: {'Content-Type': 'application/json'}
+        );
+      }
+      
+      final bid = _convertDateTimes(results.first['bids'] ?? {});
+      
+      return Response.ok(
+        jsonEncode({
+          'success': true,
+          'message': 'Bid updated successfully',
+          'bid': bid
+        }),
+        headers: {'Content-Type': 'application/json'}
+      );
+    } catch (e) {
+      print('Error updating bid: $e');
+      return Response.internalServerError(
+        body: jsonEncode({'error': 'Failed to update bid: $e'}),
+        headers: {'Content-Type': 'application/json'}
+      );
+    }
+  });
+
+  // Poll Properties Endpoints - moved to top level
+  // GET /poll_properties - Fetch all poll properties with their suggestions and vote counts
+  router.get('/poll_properties', (Request req) async {
+    try {
+      // Fetch all poll properties
+      final pollResults = await db.mappedResultsQuery('''
+        SELECT * FROM poll_properties ORDER BY created_at DESC
+      ''');
+      
+      if (pollResults.isEmpty) {
+        return Response.ok(
+          jsonEncode([]),
+          headers: {'Content-Type': 'application/json'}
+        );
+      }
+      
+      final List<Map<String, dynamic>> pollProperties = [];
+      
+      // Process each poll property
+      for (final poll in pollResults) {
+        final pollData = _convertDateTimes(poll['poll_properties'] ?? {});
+        
+        // Ensure we parse JSON fields correctly
+        if (pollData['suggestions'] != null && pollData['suggestions'] is String) {
+          try {
+            pollData['suggestions'] = jsonDecode(pollData['suggestions']);
+          } catch (e) {
+            print('Error parsing suggestions JSON: $e');
+            pollData['suggestions'] = [];
+          }
+        }
+        
+        if (pollData['poll_user_votes'] != null && pollData['poll_user_votes'] is String) {
+          try {
+            pollData['poll_user_votes'] = jsonDecode(pollData['poll_user_votes']);
+          } catch (e) {
+            print('Error parsing poll_user_votes JSON: $e');
+            pollData['poll_user_votes'] = [];
+          }
+        }
+        
+        if (pollData['poll_suggestions'] != null && pollData['poll_suggestions'] is String) {
+          try {
+            pollData['poll_suggestions'] = jsonDecode(pollData['poll_suggestions']);
+          } catch (e) {
+            print('Error parsing poll_suggestions JSON: $e');
+            pollData['poll_suggestions'] = [];
+          }
+        }
+        
+        pollProperties.add(pollData);
+      }
+      
+      return Response.ok(
+        jsonEncode(pollProperties),
+        headers: {'Content-Type': 'application/json'}
+      );
+    } catch (e) {
+      print('Error fetching poll properties: $e');
+      return Response.internalServerError(
+        body: jsonEncode({'error': 'Failed to fetch poll properties'}),
+        headers: {'Content-Type': 'application/json'}
+      );
+    }
+  });
+  
+  // POST /poll_properties - Create a new poll property with suggestions
+  router.post('/poll_properties', (Request req) async {
+    try {
+      final payload = await req.readAsString();
+      final data = jsonDecode(payload);
+      
+      // Validate required fields
+      if (data['title'] == null || data['location'] == null || data['suggestions'] == null || 
+          !data['suggestions'].isNotEmpty) {
+        return Response.badRequest(
+          body: jsonEncode({'error': 'Missing required fields: title, location, suggestions'}),
+          headers: {'Content-Type': 'application/json'}
+        );
+      }
+      
+      // Generate unique ID for the poll property
+      final uuid = Uuid();
+      final id = uuid.v4();
+      
+      // Prepare suggestions data
+      final List<Map<String, dynamic>> suggestions = [];
+      if (data['suggestions'] is List) {
+        for (final suggestion in data['suggestions']) {
+          if (suggestion is String) {
+            suggestions.add({
+              'suggestion': suggestion,
+              'votes': 0
+            });
+          } else if (suggestion is Map<String, dynamic> && suggestion.containsKey('suggestion')) {
+            suggestions.add({
+              'suggestion': suggestion['suggestion'],
+              'votes': suggestion['votes'] ?? 0
+            });
+          }
+        }
+      }
+      
+      // Insert the poll property with all JSON fields
+      await db.execute('''
+        INSERT INTO poll_properties (
+          id, 
+          title, 
+          location, 
+          image_url, 
+          suggestions, 
+          poll_user_votes, 
+          poll_suggestions
+        )
+        VALUES (
+          @id, 
+          @title, 
+          @location, 
+          @image_url, 
+          @suggestions, 
+          @poll_user_votes, 
+          @poll_suggestions
+        )
+      ''', substitutionValues: {
+        'id': id,
+        'title': data['title'],
+        'location': data['location'],
+        'image_url': data['image_url'] ?? '',
+        'suggestions': jsonEncode(suggestions),
+        'poll_user_votes': jsonEncode([]),
+        'poll_suggestions': jsonEncode(suggestions),
+      });
+      
+      return Response.ok(
+        jsonEncode({
+          'success': true,
+          'id': id,
+          'message': 'Poll property created successfully'
+        }),
+        headers: {'Content-Type': 'application/json'}
+      );
+    } catch (e) {
+      print('Error creating poll property: $e');
+      return Response.internalServerError(
+        body: jsonEncode({'error': 'Failed to create poll property'}),
+        headers: {'Content-Type': 'application/json'}
+      );
+    }
+  });
+  
+  // POST /poll_properties/:id/vote - Record a vote for a specific suggestion
+  router.post('/poll_properties/<id>/vote', (Request req, String id) async {
+    try {
+      final payload = await req.readAsString();
+      final data = jsonDecode(payload);
+      
+      // Validate required fields
+      if (data['suggestion'] == null || data['user_id'] == null) {
+        return Response.badRequest(
+          body: jsonEncode({'error': 'Missing required fields: suggestion, user_id'}),
+          headers: {'Content-Type': 'application/json'}
+        );
+      }
+      
+      // Fetch the poll property
+      final pollResults = await db.mappedResultsQuery(
+        'SELECT * FROM poll_properties WHERE id = @id',
+        substitutionValues: {'id': id}
+      );
+      
+      if (pollResults.isEmpty) {
+        return Response.notFound(
+          jsonEncode({'error': 'Poll property not found'}),
+          headers: {'Content-Type': 'application/json'}
+        );
+      }
+      
+      final pollData = pollResults.first['poll_properties'] ?? {};
+      
+      // Parse JSON fields
+      List<Map<String, dynamic>> suggestions = [];
+      List<Map<String, dynamic>> userVotes = [];
+      
+      if (pollData['suggestions'] != null) {
+        try {
+          if (pollData['suggestions'] is String) {
+            suggestions = List<Map<String, dynamic>>.from(jsonDecode(pollData['suggestions']));
+          } else if (pollData['suggestions'] is List) {
+            suggestions = List<Map<String, dynamic>>.from(pollData['suggestions']);
+          }
+        } catch (e) {
+          print('Error parsing suggestions: $e');
+          suggestions = [];
+        }
+      }
+      
+      if (pollData['poll_user_votes'] != null) {
+        try {
+          if (pollData['poll_user_votes'] is String) {
+            userVotes = List<Map<String, dynamic>>.from(jsonDecode(pollData['poll_user_votes']));
+          } else if (pollData['poll_user_votes'] is List) {
+            userVotes = List<Map<String, dynamic>>.from(pollData['poll_user_votes']);
+          }
+        } catch (e) {
+          print('Error parsing poll_user_votes: $e');
+          userVotes = [];
+        }
+      }
+      
+      // Check if suggestion exists
+      final suggestionExists = suggestions.any((s) => s['suggestion'] == data['suggestion']);
+      if (!suggestionExists) {
+        return Response.badRequest(
+          body: jsonEncode({'error': 'Invalid suggestion for this poll property'}),
+          headers: {'Content-Type': 'application/json'}
+        );
+      }
+      
+      // Check if user has already voted
+      final existingVoteIndex = userVotes.indexWhere((vote) => vote['user_id'] == data['user_id']);
+      String message;
+      
+      if (existingVoteIndex != -1) {
+        // User has already voted
+        final previousSuggestion = userVotes[existingVoteIndex]['suggestion'];
+        
+        if (previousSuggestion == data['suggestion']) {
+          return Response.ok(
+            jsonEncode({
+              'success': true,
+              'message': 'You have already voted for this suggestion'
+            }),
+            headers: {'Content-Type': 'application/json'}
+          );
+        }
+        
+        // User is changing their vote - update votes count
+        for (int i = 0; i < suggestions.length; i++) {
+          if (suggestions[i]['suggestion'] == previousSuggestion) {
+            suggestions[i]['votes'] = (suggestions[i]['votes'] ?? 0) - 1;
+            if (suggestions[i]['votes'] < 0) suggestions[i]['votes'] = 0;
+          }
+          
+          if (suggestions[i]['suggestion'] == data['suggestion']) {
+            suggestions[i]['votes'] = (suggestions[i]['votes'] ?? 0) + 1;
+          }
+        }
+        
+        // Update user vote record
+        userVotes[existingVoteIndex] = {
+          'user_id': data['user_id'],
+          'suggestion': data['suggestion'],
+          'voted_at': DateTime.now().toIso8601String()
+        };
+        
+        message = 'Vote changed successfully';
+      } else {
+        // New vote - increment vote count
+        for (int i = 0; i < suggestions.length; i++) {
+          if (suggestions[i]['suggestion'] == data['suggestion']) {
+            suggestions[i]['votes'] = (suggestions[i]['votes'] ?? 0) + 1;
+          }
+        }
+        
+        // Add user vote record
+        userVotes.add({
+          'user_id': data['user_id'],
+          'suggestion': data['suggestion'],
+          'voted_at': DateTime.now().toIso8601String()
+        });
+        
+        message = 'Vote recorded successfully';
+      }
+      
+      // Update the database with new values
+      await db.execute('''
+        UPDATE poll_properties 
+        SET suggestions = @suggestions,
+            poll_user_votes = @poll_user_votes,
+            poll_suggestions = @poll_suggestions
+        WHERE id = @id
+      ''', substitutionValues: {
+        'id': id,
+        'suggestions': jsonEncode(suggestions),
+        'poll_user_votes': jsonEncode(userVotes),
+        'poll_suggestions': jsonEncode(suggestions)
+      });
+      
+      return Response.ok(
+        jsonEncode({
+          'success': true,
+          'message': message
+        }),
+        headers: {'Content-Type': 'application/json'}
+      );
+    } catch (e) {
+      print('Error recording vote: $e');
+      return Response.internalServerError(
+        body: jsonEncode({'error': 'Failed to record vote'}),
+        headers: {'Content-Type': 'application/json'}
+      );
+    }
+  });
+
+
+  // Get user by email - FIXED: More specific route pattern
+  router.get('/users/email/<email>', (Request req, String email) async {
+    final results = await db.mappedResultsQuery(
+      '''SELECT id, email, first_name, last_name, phone_number, whatsapp_link, 
+        avatar_url, created_at, last_login, account_status 
+        FROM users WHERE email = @email''',
+      substitutionValues: {'email': email},
+    );
+
+    if (results.isEmpty) {
+      return Response.notFound(
+        jsonEncode({'error': 'User not found'}),
+        headers: {'Content-Type': 'application/json'},
+      );
+    }
+
+    final user = _convertDateTimes(results.first['users'] ?? {});
+    return Response.ok(
+      jsonEncode(user),
+      headers: {'Content-Type': 'application/json'},
+    );
+  });
+
+  // Get user settings
+  router.get('/users/id/<id>/settings', (Request req, String id) async {
+    try {
+      final userId = int.parse(id);
+      
+      final results = await db.mappedResultsQuery(
+        'SELECT * FROM user_settings WHERE user_id = @user_id',
+        substitutionValues: {'user_id': userId},
+      );
+
+      if (results.isEmpty) {
+        // Create default settings if none exist
+        await db.query(
+          'INSERT INTO user_settings (user_id) VALUES (@user_id)',
+          substitutionValues: {'user_id': userId},
+        );
+        
+        // Fetch the newly created settings using mappedResultsQuery
+        final newResults = await db.mappedResultsQuery(
+          'SELECT * FROM user_settings WHERE user_id = @user_id',
+          substitutionValues: {'user_id': userId},
+        );
+        
+        if (newResults.isEmpty) {
+          return Response.internalServerError(
+            body: jsonEncode({'error': 'Failed to create default settings'}),
+            headers: {'Content-Type': 'application/json'}
+          );
+        }
+        
+        final settings = _convertDateTimes(newResults.first['user_settings'] ?? {});
+        return Response.ok(
+          jsonEncode({'success': true, 'settings': settings}),
+          headers: {'Content-Type': 'application/json'}
+        );
+      }
+
+      final settings = _convertDateTimes(results.first['user_settings'] ?? {});
+      return Response.ok(
+        jsonEncode({'success': true, 'settings': settings}),
+        headers: {'Content-Type': 'application/json'}
+      );
+    } catch (e) {
+      print('Get user settings error: $e');
+      return Response.internalServerError(
+        body: jsonEncode({'error': 'Invalid user ID format or database error'}),
+        headers: {'Content-Type': 'application/json'}
+      );
+    }
+  });
+
+  // Update user settings
+router.put('/users/id/<id>/settings', (Request req, String id) async {
+  try {
+    final userId = int.parse(id);
+    final payload = await req.readAsString();
+    final data = jsonDecode(payload) as Map<String, dynamic>;
+
+    if (data.isEmpty) {
+      return Response.badRequest(
+        body: jsonEncode({'error': 'No data provided for update'}),
+        headers: {'Content-Type': 'application/json'}
+      );
+    }
+
+    // Check if user exists
+    final userExists = await db.mappedResultsQuery(
+      'SELECT id FROM users WHERE id = @id',
+      substitutionValues: {'id': userId},
+    );
+
+    if (userExists.isEmpty) {
+      return Response.notFound(
+        jsonEncode({'error': 'User not found'}),
+        headers: {'Content-Type': 'application/json'}
+      );
+    }
+
+    // Check if settings exist, create if not
+    final settingsExist = await db.mappedResultsQuery(
+      'SELECT user_id FROM user_settings WHERE user_id = @user_id',
+      substitutionValues: {'user_id': userId},
+    );
+
+    if (settingsExist.isEmpty) {
+      await db.query(
+        'INSERT INTO user_settings (user_id) VALUES (@user_id)',
+        substitutionValues: {'user_id': userId},
+      );
+    }
+
+    // Build dynamic update query based on provided fields
+    final updateFields = <String>[];
+    final substitutionValues = <String, dynamic>{'user_id': userId};
+
+    // Add valid fields to update (adjust these based on your user_settings table schema)
+    final validFields = [
+      'notification_preferences', 'theme', 'language', 'timezone', 
+      'privacy_settings', 'email_notifications', 'push_notifications',
+      'sms_notifications', 'marketing_emails', 'updated_at'
+    ];
+
+    for (final field in validFields) {
+      if (data.containsKey(field)) {
+        updateFields.add('$field = @$field');
+        substitutionValues[field] = data[field];
       }
     }
 
-    // Create transactions table
-    await db.execute('''
-      CREATE TABLE IF NOT EXISTS financial_transactions (
-        id UUID PRIMARY KEY,
-        user_id INTEGER NOT NULL REFERENCES users(id),
-        transaction_type VARCHAR(20) NOT NULL,
-        amount DECIMAL(15, 2) NOT NULL,
-        description TEXT,
-        status VARCHAR(20) DEFAULT 'completed',
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    ''');
-
-    // Check if rc_number and official_agency_name columns already exist
-    final columnsExist = await db.mappedResultsQuery("""
-      SELECT column_name 
-      FROM information_schema.columns 
-      WHERE table_name = 'users'
-        AND column_name IN ('rc_number', 'official_agency_name')
-    """);
-
-    if (columnsExist.isEmpty) {
-      // Add the new columns to store CAC verification data
-      await db.execute("""
-        ALTER TABLE users 
-        ADD COLUMN IF NOT EXISTS rc_number VARCHAR(50),
-        ADD COLUMN IF NOT EXISTS official_agency_name VARCHAR(255)
-      """);
-      print('Added CAC verification columns to users table');
+    if (updateFields.isEmpty) {
+      return Response.badRequest(
+        body: jsonEncode({'error': 'No valid fields provided for update'}),
+        headers: {'Content-Type': 'application/json'}
+      );
     }
 
-    print('Database tables created successfully');
-  } catch (e) {
-    print('Error creating database tables: $e');
-  } finally {
-    await db?.close();
-  }
-}
+    // Add updated_at timestamp
+    if (!data.containsKey('updated_at')) {
+      updateFields.add('updated_at = @updated_at');
+      substitutionValues['updated_at'] = DateTime.now().toIso8601String();
+    }
 
-// Investment functions
-Future<Response> fetchInvestments(Request req) async {
-  PostgreSQLConnection? db;
-  try {
-    db = await DatabaseHelper.connect();
-    final results = await db.query('SELECT * FROM investments');
-    final investments = results.map((row) {
-      final map = Map.fromIterables(
-        results.columnDescriptions.map((c) => c.columnName),
-        row,
-      );
-      // Decode JSON arrays from DB back to List<String>
-      final images = jsonDecode(map['images'] ?? '[]').cast<String>();
-      final features = jsonDecode(map['features'] ?? '[]').cast<String>();
-      
-      return Investment(
-        id: map['id'],
-        title: map['title'],
-        location: map['location'],
-        description: map['description'],
-        realtorName: map['realtorname'],
-        realtorImage: map['realtorimage'],
-        minInvestment: map['mininvestment'],
-        expectedReturn: map['expectedreturn'],
-        duration: map['duration'],
-        investors: map['investors'],
-        remainingAmount: map['remainingamount'],
-        totalAmount: map['totalamount'],
-        images: images,
-        features: features,
-      ).toJson();
-    }).toList();
-    
-    return Response.ok(jsonEncode(investments), headers: {
-      'Content-Type': 'application/json',
-    });
-  } catch (e) {
-    return Response.internalServerError(
-      body: jsonEncode({'error': 'Error fetching investments: $e'}),
+    final updateQuery = '''
+      UPDATE user_settings 
+      SET ${updateFields.join(', ')} 
+      WHERE user_id = @user_id
+    ''';
+
+    await db.query(updateQuery, substitutionValues: substitutionValues);
+
+    // Fetch and return updated settings
+    final results = await db.mappedResultsQuery(
+      'SELECT * FROM user_settings WHERE user_id = @user_id',
+      substitutionValues: {'user_id': userId},
     );
-  } finally {
-    await db?.close();
+
+    if (results.isEmpty) {
+      return Response.internalServerError(
+        body: jsonEncode({'error': 'Failed to fetch updated settings'}),
+        headers: {'Content-Type': 'application/json'}
+      );
+    }
+
+    final settings = _convertDateTimes(results.first['user_settings'] ?? {});
+    return Response.ok(
+      jsonEncode({'success': true, 'settings': settings, 'message': 'Settings updated successfully'}),
+      headers: {'Content-Type': 'application/json'}
+    );
+
+  } catch (e) {
+    print('Update user settings error: $e');
+    return Response.internalServerError(
+      body: jsonEncode({'error': 'Invalid data format or database error'}),
+      headers: {'Content-Type': 'application/json'}
+    );
   }
-}
+});
+
+  // Get all properties (returns JSON)
+  router.get('/properties', (Request req) async {
+    final results = await db.mappedResultsQuery('SELECT * FROM properties');
+    final properties = results.map((row) => _convertDateTimes(row['properties'] ?? {})).toList();
+    return Response.ok(jsonEncode(properties), headers: {'Content-Type': 'application/json'});
+  });
+
+  // Create property - using the comprehensive handlePostProperty function
+  router.post('/properties', (Request req) {
+    return handlePostProperty(req, db);
+  });
+
+  router.get('/properties/residential', (Request req) async {
+    final results = await db.mappedResultsQuery("SELECT * FROM properties WHERE type = 'residential'");
+    final properties = results.map((row) => _convertDateTimes(row['properties'] ?? {})).toList();
+    return Response.ok(jsonEncode(properties), headers: {'Content-Type': 'application/json'});
+  });
+
+  router.get('/properties/commercial', (Request req) async {
+    final results = await db.mappedResultsQuery("SELECT * FROM properties WHERE type = 'commercial'");
+    final properties = results.map((row) => _convertDateTimes(row['properties'] ?? {})).toList();
+    return Response.ok(jsonEncode(properties), headers: {'Content-Type': 'application/json'});
+  });
+
+  router.get('/properties/land', (Request req) async {
+    final results = await db.mappedResultsQuery("SELECT * FROM properties WHERE type = 'land'");
+    final properties = results.map((row) => _convertDateTimes(row['properties'] ?? {})).toList();
+    return Response.ok(jsonEncode(properties), headers: {'Content-Type': 'application/json'});
+  });
+
+  router.get('/properties/material', (Request req) async {
+    final results = await db.mappedResultsQuery("SELECT * FROM properties WHERE type = 'material'");
+    final properties = results.map((row) => _convertDateTimes(row['properties'] ?? {})).toList();
+    return Response.ok(jsonEncode(properties), headers: {'Content-Type': 'application/json'});
+  });
+
+  // GET /properties/property_id
+  router.get('/properties/<id>', (Request req, String id) async {
+    List<Map<String, Map<String, dynamic>>> results = [];
+    // Try integer id first
+    try {
+      results = await db.mappedResultsQuery(
+        'SELECT * FROM properties WHERE id = @id',
+        substitutionValues: {'id': int.parse(id)},
+      );
+    } catch (_) {
+      // If not integer, try property_id
+      results = await db.mappedResultsQuery(
+        'SELECT * FROM properties WHERE property_id = @property_id',
+        substitutionValues: {'property_id': id},
+      );
+    }
+    if (results.isEmpty) {
+      return Response.notFound(
+        jsonEncode({'error': 'Property not found'}),
+        headers: {'Content-Type': 'application/json'},
+      );
+    }
+    final property = _convertDateTimes(results.first['properties'] ?? {});
+    return Response.ok(
+      jsonEncode(property),
+      headers: {'Content-Type': 'application/json'},
+    );
+  });
+  
+  // Get properties by user_id
+  router.get('/properties/user', (Request req) async {
+    try {
+      final params = req.url.queryParameters;
+      final userId = params['user_id'];
+      
+      if (userId == null || userId.isEmpty) {
+        return Response.badRequest(
+          body: jsonEncode({'error': 'Missing required user_id parameter'}),
+          headers: {'Content-Type': 'application/json'}
+        );
+      }
+      
+      final results = await db.mappedResultsQuery(
+        'SELECT * FROM properties WHERE user_id = @user_id ORDER BY created_at DESC',
+        substitutionValues: {'user_id': userId},
+      );
+      
+      final properties = results.map((row) => _convertDateTimes(row['properties'] ?? {})).toList();
+      
+      return Response.ok(
+        jsonEncode(properties),
+        headers: {'Content-Type': 'application/json'}
+      );
+    } catch (e) {
+      print('Error fetching properties by user_id: $e');
+      return Response.internalServerError(
+        body: jsonEncode({'error': 'Failed to fetch user properties: $e'}),
+        headers: {'Content-Type': 'application/json'}
+      );
+    }
+  });
+
 
 Future<Response> createInvestment(Request req) async {
-  PostgreSQLConnection? db;
+  final db = await DatabaseHelper.connect();
   final uuid = Uuid();
+
   try {
-    db = await DatabaseHelper.connect();
     final body = await req.readAsString();
     final investmentData = jsonDecode(body);
-    
+
     // Generate a new ID
     final id = uuid.v4();
-    
+
     // Extract and prepare values
     final investment = Investment.fromJson({
       'id': id,
@@ -765,1579 +1680,555 @@ Future<Response> createInvestment(Request req) async {
       body: 'Error creating investment: $e',
     );
   } finally {
-    await db?.close();
+    await db.close();
   }
 }
 
-void main() async {
-  // Apply database migrations
-  await _applyMigrations();
+Future<Response> fetchInvestments(Request req) async {
+  final db = await DatabaseHelper.connect();
 
-  // Initialize database connection
-  PostgreSQLConnection db = await DatabaseHelper.connect();
+  try {
+    final results = await db.query('SELECT * FROM investments');
+    final investments = results.map((row) {
+  final map = Map.fromIterables(
+    results.columnDescriptions.map((c) => c.columnName),
+    row,
+  );
 
-  final router = Router();
+  // Decode JSON arrays from DB back to List<String>
+  final images = jsonDecode(map['images'] ?? '[]').cast<String>();
+  final features = jsonDecode(map['features'] ?? '[]').cast<String>();
 
-  // Helper to convert DateTime fields to string
-  Map<String, dynamic> _convertDateTimes(Map<String, dynamic> map) {
-    final result = <String, dynamic>{};
-    map.forEach((key, value) {
-      if (value is DateTime) {
-        result[key] = value.toIso8601String();
-      } else {
-        result[key] = value;
-      }
-    });
-    return result;
+  return Investment(
+    id: map['id'],
+    title: map['title'],
+    location: map['location'],
+    description: map['description'],
+    realtorName: map['realtorname'],
+    realtorImage: map['realtorimage'],
+    minInvestment: map['mininvestment'],
+    expectedReturn: map['expectedreturn'],
+    duration: map['duration'],
+    investors: map['investors'],
+    remainingAmount: map['remainingamount'],
+    totalAmount: map['totalamount'],
+    images: images,
+    features: features,
+  ).toJson();
+}).toList();
+
+
+return Response.ok(jsonEncode(investments), headers: {
+  'Content-Type': 'application/json',
+});
+
+  } catch (e) {
+    return Response.internalServerError(
+      body: jsonEncode({'error': 'Error fetching investments: $e'}),
+    );
+  } finally {
+    await db.close();
   }
+}
 
-  // Helper to safely parse numeric values to double
-  double _parseDouble(dynamic value) {
-    if (value == null) return 0.0;
-    if (value is num) return value.toDouble();
-    if (value is String) {
-      try {
-        return double.parse(value);
-      } catch (_) {
-        return 0.0;
-      }
-    }
-    return 0.0;
-  }
+  // Add API endpoint for creating investments
+  router.post('/investments', (Request req) async {
+    return createInvestment(req);
+  });
+
+  // Add API endpoint for fetching investments
+  router.get('/investments', (Request req) async {
+    return fetchInvestments(req);
+  });
+
+
+
+
+
+
 
   // CORS helper function
   Response _cors(Response response) => response.change(
     headers: {
+      ...response.headers,
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-      'Access-Control-Allow-Headers': 'Origin, Content-Type, Accept, Authorization, X-Requested-With',
+      'Access-Control-Allow-Headers': 'Origin, Content-Type, Accept, Authorization',
     },
   );
 
-  // CORS preflight handler
-  router.options('/<path|.*>', (Request request, String path) {
-    return _cors(Response.ok(''));
+  // CAC agency verification endpoint
+  router.post('/verify-agency', CacVerificationHandler.handleVerifyAgency);
+
+  // New endpoint for voting on poll suggestions without property ID in URL
+  router.post('/poll_properties/vote', (Request req) async {
+    try {
+      final payload = await req.readAsString();
+      final data = jsonDecode(payload);
+
+      final userId = data['user_id'];
+      final suggestion = data['suggestion'];
+
+      if (userId == null || suggestion == null) {
+        return Response.badRequest(
+          body: jsonEncode({'error': 'Missing user_id or suggestion'}),
+          headers: {'Content-Type': 'application/json'},
+        );
+      }
+
+      // Step 1: Check if suggestion exists in poll_suggestions
+      final suggestionQuery = await db.query(
+        'SELECT * FROM poll_suggestions WHERE suggestion = @suggestion',
+        substitutionValues: {'suggestion': suggestion},
+      );
+
+      if (suggestionQuery.isEmpty) {
+        return Response.badRequest(
+          body: jsonEncode({'error': 'Invalid suggestion for this poll property'}),
+          headers: {'Content-Type': 'application/json'},
+        );
+      }
+
+      // Step 2: Prevent duplicate votes by checking poll_user_votes
+      final voteCheck = await db.query(
+        'SELECT * FROM poll_user_votes WHERE user_id = @userId AND suggestion = @suggestion',
+        substitutionValues: {
+          'userId': userId,
+          'suggestion': suggestion,
+        },
+      );
+
+      if (voteCheck.isNotEmpty) {
+        return Response.forbidden(
+          jsonEncode({'error': 'You have already voted for this suggestion'}),
+          headers: {'Content-Type': 'application/json'},
+        );
+      }
+
+      // Step 3: Record the vote
+      final voteId = Uuid().v4();
+      await db.execute(
+        'INSERT INTO poll_user_votes (id, user_id, suggestion, voted_at) '
+        'VALUES (@id, @userId, @suggestion, NOW())',
+        substitutionValues: {
+          'id': voteId,
+          'userId': userId,
+          'suggestion': suggestion,
+        },
+      );
+
+      // Step 4: Increment vote count
+      await db.execute(
+        'UPDATE poll_suggestions SET votes = votes + 1 WHERE suggestion = @suggestion',
+        substitutionValues: {'suggestion': suggestion},
+      );
+
+      return Response.ok(
+        jsonEncode({'message': 'Vote recorded successfully'}),
+        headers: {'Content-Type': 'application/json'},
+      );
+
+    } catch (e) {
+      return Response.internalServerError(
+        body: jsonEncode({'error': e.toString()}),
+        headers: {'Content-Type': 'application/json'},
+      );
+    }
   });
 
-  // Helper functions for bid and listing counts
-  Future<Map<String, int>> getBidCounts(int userId) async {
-    try {
-      final results = await db.query('''
-        SELECT status, COUNT(*) as count
-        FROM bids
-        WHERE user_id = @user_id
-        GROUP BY status
-      ''', substitutionValues: {'user_id': userId.toString()});
+  // Create necessary tables for user dashboard
+  try {
+    // Check if financial_data table exists
+    final financialTableExists = await db.mappedResultsQuery("""
+      SELECT table_name 
+      FROM information_schema.tables 
+      WHERE table_name = 'user_financial_data'
+    """);
 
-      final counts = <String, int>{
-        'pending': 0,
-        'accepted': 0,
-        'rejected': 0,
-        'expired': 0,
-      };
-
-      for (final row in results) {
-        final status = row[0] as String;
-        final count = row[1] as int;
-        counts[status] = count;
-      }
-
-      return counts;
-    } catch (e) {
-      print('Error getting bid counts: $e');
-      return {'pending': 0, 'accepted': 0, 'rejected': 0, 'expired': 0};
-    }
-  }
-
-  Future<Map<String, int>> getListingCounts(int userId) async {
-    try {
-      final results = await db.query('''
-        SELECT 
-          COUNT(*) as all_count,
-          COUNT(CASE WHEN is_active = true AND status = 'active' THEN 1 END) as active_count,
-          COUNT(CASE WHEN status = 'pending' THEN 1 END) as pending_count,
-          COUNT(CASE WHEN status = 'sold' OR status = 'archive' THEN 1 END) as archive_count
-        FROM properties
-        WHERE user_id = @user_id
-      ''', substitutionValues: {'user_id': userId});
-
-      if (results.isNotEmpty) {
-        final row = results.first;
-        return {
-          'all': row[0] as int,
-          'active': row[1] as int,
-          'pending': row[2] as int,
-          'archive': row[3] as int,
-        };
-      }
-
-      return {'all': 0, 'active': 0, 'pending': 0, 'archive': 0};
-    } catch (e) {
-      print('Error getting listing counts: $e');
-      return {'all': 0, 'active': 0, 'pending': 0, 'archive': 0};
-    }
-  }
-
-  Future<List<Map<String, dynamic>>> getRecentTransactions(int userId, {int limit = 5}) async {
-    try {
-      final results = await db.query('''
-        SELECT id, transaction_type, amount, description, status, created_at
-        FROM financial_transactions
-        WHERE user_id = @user_id
-        ORDER BY created_at DESC
-        LIMIT @limit
-      ''', substitutionValues: {'user_id': userId, 'limit': limit});
-
-      return results.map((row) {
-        return {
-          'id': row[0],
-          'transaction_type': row[1],
-          'amount': _parseDouble(row[2]),
-          'description': row[3] ?? '',
-          'status': row[4] ?? 'completed',
-          'created_at': (row[5] as DateTime).toIso8601String(),
-        };
-      }).toList();
-    } catch (e) {
-      print('Error getting recent transactions: $e');
-      return [];
-    }
-  }
-
-  Future<List<Map<String, dynamic>>> getFavoriteListings(int userId, {int limit = 5}) async {
-    try {
-      // For now, return sample data since favorites table doesn't exist yet
-      return [
-        {
-          'id': '1',
-          'title': 'Modern Apartment',
-          'price': 2500000.0,
-          'image_url': 'assets/images/mipripity.png',
-          'category': 'residential',
-          'location': 'Lagos',
-        },
-        {
-          'id': '2',
-          'title': 'Commercial Space',
-          'price': 5000000.0,
-          'image_url': 'assets/images/mipripity.png',
-          'category': 'commercial',
-          'location': 'Abuja',
-        },
-      ];
-    } catch (e) {
-      print('Error getting favorite listings: $e');
-      return [];
-    }
-  }
-
-  Future<List<Map<String, dynamic>>> getPropertyRecommendations(int userId, {int limit = 5}) async {
-    try {
-      // For now, return sample data since AI recommendations don't exist yet
-      return [
-        {
-          'id': '1',
-          'title': 'Luxury Villa',
-          'price': 15000000.0,
-          'image_url': 'assets/images/mipripity.png',
-          'category': 'residential',
-          'location': 'Victoria Island',
-          'match_percentage': 95.0,
-        },
-        {
-          'id': '2',
-          'title': 'Office Complex',
-          'price': 25000000.0,
-          'image_url': 'assets/images/mipripity.png',
-          'category': 'commercial',
-          'location': 'Ikoyi',
-          'match_percentage': 88.0,
-        },
-      ];
-    } catch (e) {
-      print('Error getting property recommendations: $e');
-      return [];
-    }
-  }
-
-  // Enhanced financial dashboard endpoint
-  router.get('/users/id/<userId>/financial-dashboard', (Request request, String userId) async {
-    try {
-      final userIdInt = int.parse(userId);
+    if (financialTableExists.isEmpty) {
+      // Create user_financial_data table
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS user_financial_data (
+          id SERIAL PRIMARY KEY,
+          user_id INTEGER NOT NULL REFERENCES users(id),
+          monthly_income DECIMAL(15, 2) DEFAULT 0,
+          total_funds DECIMAL(15, 2) DEFAULT 0,
+          total_bids DECIMAL(15, 2) DEFAULT 0,
+          total_interests DECIMAL(15, 2) DEFAULT 0,
+          income_breakdown JSONB DEFAULT '{}'::jsonb,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(user_id)
+        )
+      ''');
       
-      // Get user financial data
-      final financialResults = await db.query('''
-        SELECT monthly_income, income_start_timestamp, total_funds, total_bids, total_interests, income_breakdown
-        FROM user_financial_data
-        WHERE user_id = @user_id
-      ''', substitutionValues: {'user_id': userIdInt});
+      // Create transactions table
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS financial_transactions (
+          id UUID PRIMARY KEY,
+          user_id INTEGER NOT NULL REFERENCES users(id),
+          transaction_type VARCHAR(20) NOT NULL,
+          amount DECIMAL(15, 2) NOT NULL,
+          description TEXT,
+          status VARCHAR(20) DEFAULT 'completed',
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      ''');
+      
+      print('Created financial dashboard tables');
+    }
+    
+    // Check if rc_number and official_agency_name columns already exist
+    final columnsExist = await db.mappedResultsQuery("""
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'users' 
+        AND column_name IN ('rc_number', 'official_agency_name')
+    """);
+    
+    if (columnsExist.isEmpty) {
+      // Add the new columns to store CAC verification data
+      await db.execute("""
+        ALTER TABLE users 
+        ADD COLUMN IF NOT EXISTS rc_number VARCHAR(50),
+        ADD COLUMN IF NOT EXISTS official_agency_name VARCHAR(255)
+      """);
+      print('Added CAC verification columns to users table');
+    }
+  } catch (e) {
+    print('Error updating database schema: $e');
+    // Continue anyway, as this is not critical for the API to function
+  }
 
-      double monthlyIncome = 0.0;
-      DateTime? incomeStartTimestamp;
-      double totalFunds = 0.0;
-      double totalBids = 0.0;
-      double totalInterests = 0.0;
-      Map<String, double> incomeBreakdown = {};
+  // User financial dashboard endpoints
+  
+  // GET /users/id/:id/financial-dashboard - Get user's financial dashboard data
+  router.get('/users/id/<id>/financial-dashboard', (Request req, String id) async {
+    try {
+      final userId = int.parse(id);
+      
+      // Check if user exists
+      final userExists = await db.mappedResultsQuery(
+        'SELECT id FROM users WHERE id = @id',
+        substitutionValues: {'id': userId},
+      );
 
-      if (financialResults.isNotEmpty) {
-        final row = financialResults.first;
-        monthlyIncome = _parseDouble(row[0]);
-        incomeStartTimestamp = row[1] as DateTime?;
-        totalFunds = _parseDouble(row[2]);
-        totalBids = _parseDouble(row[3]);
-        totalInterests = _parseDouble(row[4]);
+      if (userExists.isEmpty) {
+        return Response.notFound(
+          jsonEncode({'error': 'User not found'}),
+          headers: {'Content-Type': 'application/json'}
+        );
+      }
+      
+      // Get or create financial data
+      var financialData = await db.mappedResultsQuery(
+        'SELECT * FROM user_financial_data WHERE user_id = @user_id',
+        substitutionValues: {'user_id': userId},
+      );
+      
+      if (financialData.isEmpty) {
+        // Create default financial data
+        await db.execute('''
+          INSERT INTO user_financial_data (user_id, monthly_income, total_funds)
+          VALUES (@user_id, 0, 0)
+        ''', substitutionValues: {'user_id': userId});
         
-        if (row[5] != null) {
-          final breakdown = jsonDecode(row[5] as String) as Map<String, dynamic>;
-          incomeBreakdown = breakdown.map((k, v) => MapEntry(k, _parseDouble(v)));
-        }
+        financialData = await db.mappedResultsQuery(
+          'SELECT * FROM user_financial_data WHERE user_id = @user_id',
+          substitutionValues: {'user_id': userId},
+        );
       }
-
-      // Get bid and listing counts
-      final bidCounts = await getBidCounts(userIdInt);
-      final listingCounts = await getListingCounts(userIdInt);
-
-      // Get recent transactions
-      final recentTransactions = await getRecentTransactions(userIdInt);
-
-      // Get favorite listings
-      final favoriteListings = await getFavoriteListings(userIdInt);
-
-      // Get property recommendations
-      final recommendations = await getPropertyRecommendations(userIdInt);
-
-      // Calculate expense breakdown
-      final expenseBreakdown = {
-        'Bids': totalBids,
-        'Purchases': 0.0,
-        'Withdrawals': 0.0,
+      
+      final userData = _convertDateTimes(financialData.first['user_financial_data'] ?? {});
+      
+      // Fetch recent transactions
+      final transactions = await db.mappedResultsQuery('''
+        SELECT * FROM financial_transactions 
+        WHERE user_id = @user_id 
+        ORDER BY created_at DESC LIMIT 5
+      ''', substitutionValues: {'user_id': userId});
+      
+      final recentTransactions = transactions.map((row) => 
+        _convertDateTimes(row['financial_transactions'] ?? {})
+      ).toList();
+      
+      // Fetch active bids
+      final bids = await db.mappedResultsQuery('''
+        SELECT * FROM bids 
+        WHERE user_id = @user_id AND status IN ('pending', 'active') 
+        ORDER BY created_at DESC
+      ''', substitutionValues: {'user_id': userId.toString()});
+      
+      final activeBids = bids.map((row) => 
+        _convertDateTimes(row['bids'] ?? {})
+      ).toList();
+      
+      // Create income breakdown based on monthly income
+      final monthlyIncome = userData['monthly_income'] ?? 0.0;
+      final incomeBreakdown = {
+        'second': monthlyIncome / (30 * 24 * 60 * 60),
+        'minute': monthlyIncome / (30 * 24 * 60),
+        'hour': monthlyIncome / (30 * 24),
+        'day': monthlyIncome / 30,
+        'week': monthlyIncome / 4,
+        'month': monthlyIncome,
+        'year': monthlyIncome * 12,
       };
-
-      // If no income breakdown exists, create default one
-      if (incomeBreakdown.isEmpty && monthlyIncome > 0) {
-        incomeBreakdown = {
-          'Salary': monthlyIncome * 0.8,
-          'Investment': monthlyIncome * 0.1,
-          'Other': monthlyIncome * 0.1,
-        };
-      }
-
-      final dashboardData = {
-        'total_funds': totalFunds,
+      
+      // Compile response
+      final response = {
+        'total_funds': userData['total_funds'] ?? 0.0,
         'monthly_income': monthlyIncome,
-        'income_start_timestamp': incomeStartTimestamp?.toIso8601String(),
-        'total_bids': totalBids,
-        'total_interests': totalInterests,
-        'total_expenses': totalBids, // For now, expenses are just bids
+        'total_bids': userData['total_bids'] ?? 0.0,
+        'total_interests': userData['total_interests'] ?? 0.0,
         'recent_transactions': recentTransactions,
-        'active_bids': [], // Will be populated from bids table if needed
-        'favorite_listings': favoriteListings,
-        'my_listings': [], // Will be populated from properties table if needed
-        'recommendations': recommendations,
+        'active_bids': activeBids,
         'income_breakdown': incomeBreakdown,
-        'expense_breakdown': expenseBreakdown,
-        'bid_counts': bidCounts,
-        'listing_counts': listingCounts,
       };
-
-      return _cors(Response.ok(
-        jsonEncode(dashboardData),
-        headers: {'Content-Type': 'application/json'},
-      ));
+      
+      return Response.ok(
+        jsonEncode(response),
+        headers: {'Content-Type': 'application/json'}
+      );
+      
     } catch (e) {
       print('Error fetching financial dashboard: $e');
-      return _cors(Response.internalServerError(
+      return Response.internalServerError(
         body: jsonEncode({'error': 'Failed to fetch financial dashboard data'}),
-        headers: {'Content-Type': 'application/json'},
-      ));
+        headers: {'Content-Type': 'application/json'}
+      );
     }
   });
-
-  // User income endpoint
-  router.post('/user/income', (Request request) async {
+  
+  // PUT /users/id/:id/financial - Update user's financial data
+  router.put('/users/id/<id>/financial', (Request req, String id) async {
     try {
-      final payload = await request.readAsString();
+      final userId = int.parse(id);
+      final payload = await req.readAsString();
       final data = jsonDecode(payload);
       
-      final userId = data['user_id'];
-      final amount = _parseDouble(data['amount']);
-      final startTimestamp = data['start_timestamp'] != null 
-          ? DateTime.parse(data['start_timestamp'])
-          : DateTime.now();
+      // Check if user exists
+      final userExists = await db.mappedResultsQuery(
+        'SELECT id FROM users WHERE id = @id',
+        substitutionValues: {'id': userId},
+      );
 
-      // Insert or update user financial data
-      await db.execute('''
-        INSERT INTO user_financial_data (user_id, monthly_income, income_start_timestamp, updated_at)
-        VALUES (@user_id, @amount, @start_timestamp, CURRENT_TIMESTAMP)
-        ON CONFLICT (user_id) 
-        DO UPDATE SET 
-          monthly_income = @amount,
-          income_start_timestamp = @start_timestamp,
-          updated_at = CURRENT_TIMESTAMP
-      ''', substitutionValues: {
-        'user_id': userId,
-        'amount': amount,
-        'start_timestamp': startTimestamp,
-      });
-
-      return _cors(Response.ok(
-        jsonEncode({'status': 'success', 'message': 'Income updated successfully'}),
-        headers: {'Content-Type': 'application/json'},
-      ));
-    } catch (e) {
-      print('Error updating user income: $e');
-      return _cors(Response.internalServerError(
-        body: jsonEncode({'error': 'Failed to update income'}),
-        headers: {'Content-Type': 'application/json'},
-      ));
-    }
-  });
-
-  // Bid counts endpoint
-  router.get('/users/<userId>/bids/counts', (Request request, String userId) async {
-    try {
-      final userIdInt = int.parse(userId);
-      final counts = await getBidCounts(userIdInt);
+      if (userExists.isEmpty) {
+        return Response.notFound(
+          jsonEncode({'error': 'User not found'}),
+          headers: {'Content-Type': 'application/json'}
+        );
+      }
       
-      return _cors(Response.ok(
-        jsonEncode(counts),
-        headers: {'Content-Type': 'application/json'},
-      ));
-    } catch (e) {
-      print('Error fetching bid counts: $e');
-      return _cors(Response.internalServerError(
-        body: jsonEncode({'error': 'Failed to fetch bid counts'}),
-        headers: {'Content-Type': 'application/json'},
-      ));
-    }
-  });
-
-  // User bids endpoint
-  router.get('/users/<userId>/bids', (Request request, String userId) async {
-    try {
-      final userIdInt = int.parse(userId);
-      final status = request.url.queryParameters['status'];
+      // Check if financial data exists, create if not
+      var financialData = await db.mappedResultsQuery(
+        'SELECT id FROM user_financial_data WHERE user_id = @user_id',
+        substitutionValues: {'user_id': userId},
+      );
       
-      String query = '''
-        SELECT id, listing_id, listing_title, listing_image, listing_category, 
-               listing_location, listing_price, bid_amount, status, created_at,
-               response_message, response_date, user_id
-        FROM bids
+      if (financialData.isEmpty) {
+        await db.execute('''
+          INSERT INTO user_financial_data (user_id)
+          VALUES (@user_id)
+        ''', substitutionValues: {'user_id': userId});
+      }
+      
+      // Build dynamic update query based on provided fields
+      final updateFields = <String>[];
+      final substitutionValues = <String, dynamic>{'user_id': userId};
+      
+      // Valid fields to update
+      final validFields = [
+        'monthly_income', 'total_funds', 'total_bids', 'total_interests',
+        'income_breakdown'
+      ];
+      
+      for (final field in validFields) {
+        if (data.containsKey(field)) {
+          updateFields.add('$field = @$field');
+          
+          if (field == 'income_breakdown' && data[field] is Map) {
+            substitutionValues[field] = jsonEncode(data[field]);
+          } else {
+            substitutionValues[field] = data[field];
+          }
+        }
+      }
+      
+      if (updateFields.isEmpty) {
+        return Response.badRequest(
+          body: jsonEncode({'error': 'No valid fields provided for update'}),
+          headers: {'Content-Type': 'application/json'}
+        );
+      }
+      
+      // Add updated_at timestamp
+      updateFields.add('updated_at = NOW()');
+      
+      final updateQuery = '''
+        UPDATE user_financial_data 
+        SET ${updateFields.join(', ')} 
         WHERE user_id = @user_id
       ''';
       
-      Map<String, dynamic> substitutionValues = {'user_id': userId};
+      await db.execute(updateQuery, substitutionValues: substitutionValues);
       
-      if (status != null && status.isNotEmpty) {
-        query += ' AND status = @status';
-        substitutionValues['status'] = status;
+      // Get updated financial data
+      final updatedData = await db.mappedResultsQuery(
+        'SELECT * FROM user_financial_data WHERE user_id = @user_id',
+        substitutionValues: {'user_id': userId},
+      );
+      
+      if (updatedData.isEmpty) {
+        return Response.internalServerError(
+          body: jsonEncode({'error': 'Failed to fetch updated financial data'}),
+          headers: {'Content-Type': 'application/json'}
+        );
       }
       
-      query += ' ORDER BY created_at DESC';
+      final result = _convertDateTimes(updatedData.first['user_financial_data'] ?? {});
       
-      final results = await db.query(query, substitutionValues: substitutionValues);
+      return Response.ok(
+        jsonEncode({
+          'success': true,
+          'data': result,
+          'message': 'Financial data updated successfully'
+        }),
+        headers: {'Content-Type': 'application/json'}
+      );
       
-      final bids = results.map((row) {
-        return {
-          'id': row[0],
-          'listing_id': row[1],
-          'listing_title': row[2],
-          'listing_image': row[3],
-          'listing_category': row[4],
-          'listing_location': row[5],
-          'listing_price': _parseDouble(row[6]),
-          'bid_amount': _parseDouble(row[7]),
-          'status': row[8],
-          'created_at': (row[9] as DateTime).toIso8601String(),
-          'response_message': row[10],
-          'response_date': row[11] != null ? (row[11] as DateTime).toIso8601String() : null,
-          'user_id': row[12],
-        };
-      }).toList();
-      
-      return _cors(Response.ok(
-        jsonEncode(bids),
-        headers: {'Content-Type': 'application/json'},
-      ));
     } catch (e) {
-      print('Error fetching user bids: $e');
-      return _cors(Response.internalServerError(
-        body: jsonEncode({'error': 'Failed to fetch user bids'}),
-        headers: {'Content-Type': 'application/json'},
-      ));
+      print('Error updating financial data: $e');
+      return Response.internalServerError(
+        body: jsonEncode({'error': 'Failed to update financial data'}),
+        headers: {'Content-Type': 'application/json'}
+      );
     }
   });
-
-  // Listing counts endpoint
-  router.get('/users/<userId>/listings/counts', (Request request, String userId) async {
+  
+  // POST /users/id/:id/transactions - Record a new financial transaction
+  router.post('/users/id/<id>/transactions', (Request req, String id) async {
     try {
-      final userIdInt = int.parse(userId);
-      final counts = await getListingCounts(userIdInt);
-      
-      return _cors(Response.ok(
-        jsonEncode(counts),
-        headers: {'Content-Type': 'application/json'},
-      ));
-    } catch (e) {
-      print('Error fetching listing counts: $e');
-      return _cors(Response.internalServerError(
-        body: jsonEncode({'error': 'Failed to fetch listing counts'}),
-        headers: {'Content-Type': 'application/json'},
-      ));
-    }
-  });
-
-  // User listings endpoint
-  router.get('/users/<userId>/listings', (Request request, String userId) async {
-    try {
-      final userIdInt = int.parse(userId);
-      final status = request.url.queryParameters['status'];
-      
-      String query = '''
-        SELECT property_id, title, price, location, category, user_id, description,
-               condition, quantity, type, address, lister_name, lister_email,
-               lister_whatsapp, images, latitude, longitude, is_active, is_verified,
-               status, created_at, updated_at
-        FROM properties
-        WHERE user_id = @user_id
-      ''';
-      
-      Map<String, dynamic> substitutionValues = {'user_id': userIdInt};
-      
-      if (status != null && status.isNotEmpty && status != 'all') {
-        if (status == 'active') {
-          query += ' AND is_active = true AND status = \'active\'';
-        } else if (status == 'archive') {
-          query += ' AND (status = \'sold\' OR status = \'archive\')';
-        } else {
-          query += ' AND status = @status';
-          substitutionValues['status'] = status;
-        }
-      }
-      
-      query += ' ORDER BY created_at DESC';
-      
-      final results = await db.query(query, substitutionValues: substitutionValues);
-      
-      final listings = results.map((row) {
-        List<String> imagesList = [];
-        if (row[14] != null) {
-          try {
-            final decoded = jsonDecode(row[14] as String);
-            if (decoded is List) {
-              imagesList = decoded.cast<String>();
-            }
-          } catch (e) {
-            print('Error parsing images JSON: $e');
-          }
-        }
-
-        return {
-          'id': row[0],
-          'property_id': row[0],
-          'title': row[1],
-          'price': _parseDouble(row[2]),
-          'location': row[3],
-          'category': row[4],
-          'user_id': row[5],
-          'description': row[6],
-          'condition': row[7],
-          'quantity': row[8],
-          'type': row[9],
-          'address': row[10],
-          'lister_name': row[11],
-          'lister_email': row[12],
-          'lister_whatsapp': row[13],
-          'images': imagesList,
-          'latitude': row[15] != null ? _parseDouble(row[15]) : null,
-          'longitude': row[16] != null ? _parseDouble(row[16]) : null,
-          'is_active': row[17] ?? false,
-          'is_verified': row[18] ?? false,
-          'status': row[19] ?? 'active',
-          'created_at': (row[20] as DateTime).toIso8601String(),
-          'updated_at': (row[21] as DateTime).toIso8601String(),
-        };
-      }).toList();
-      
-      return _cors(Response.ok(
-        jsonEncode(listings),
-        headers: {'Content-Type': 'application/json'},
-      ));
-    } catch (e) {
-      print('Error fetching user listings: $e');
-      return _cors(Response.internalServerError(
-        body: jsonEncode({'error': 'Failed to fetch user listings'}),
-        headers: {'Content-Type': 'application/json'},
-      ));
-    }
-  });
-
-  // Create bid endpoint
-  router.post('/bids', (Request request) async {
-    try {
-      final payload = await request.readAsString();
+      final userId = int.parse(id);
+      final payload = await req.readAsString();
       final data = jsonDecode(payload);
       
-      final bidId = Uuid().v4();
-      final userId = data['user_id'].toString();
-      final listingId = data['listing_id'];
-      final bidAmount = _parseDouble(data['bid_amount']);
-      final message = data['message'];
-      final status = data['status'] ?? 'pending';
-      
-      // Get listing details
-      final listingResults = await db.query('''
-        SELECT title, price, category, location, images
-        FROM properties
-        WHERE property_id = @listing_id
-      ''', substitutionValues: {'listing_id': listingId});
-      
-      if (listingResults.isEmpty) {
-        return _cors(Response.badRequest(
-          body: jsonEncode({'error': 'Listing not found'}),
-          headers: {'Content-Type': 'application/json'},
-        ));
+      // Validate required fields
+      if (data['amount'] == null || data['transaction_type'] == null) {
+        return Response.badRequest(
+          body: jsonEncode({'error': 'Missing required fields: amount, transaction_type'}),
+          headers: {'Content-Type': 'application/json'}
+        );
       }
       
-      final listing = listingResults.first;
-      String listingImage = 'assets/images/mipripity.png';
-      
-      if (listing[4] != null) {
-        try {
-          final images = jsonDecode(listing[4] as String) as List;
-          if (images.isNotEmpty) {
-            listingImage = images.first.toString();
-          }
-        } catch (e) {
-          print('Error parsing listing images: $e');
-        }
+      // Check if user exists
+      final userExists = await db.mappedResultsQuery(
+        'SELECT id FROM users WHERE id = @id',
+        substitutionValues: {'id': userId},
+      );
+
+      if (userExists.isEmpty) {
+        return Response.notFound(
+          jsonEncode({'error': 'User not found'}),
+          headers: {'Content-Type': 'application/json'}
+        );
       }
       
-      // Insert bid
+      // Generate transaction ID
+      final uuid = Uuid();
+      final transactionId = uuid.v4();
+      
+      // Insert transaction
       await db.execute('''
-        INSERT INTO bids (
-          id, listing_id, listing_title, listing_image, listing_category,
-          listing_location, listing_price, bid_amount, status, created_at,
-          response_message, user_id
+        INSERT INTO financial_transactions (
+          id, user_id, transaction_type, amount, description, status, created_at
         ) VALUES (
-          @id, @listing_id, @listing_title, @listing_image, @listing_category,
-          @listing_location, @listing_price, @bid_amount, @status, CURRENT_TIMESTAMP,
-          @message, @user_id
+          @id, @user_id, @transaction_type, @amount, @description, @status, @created_at
         )
       ''', substitutionValues: {
-        'id': bidId,
-        'listing_id': listingId,
-        'listing_title': listing[0],
-        'listing_image': listingImage,
-        'listing_category': listing[2],
-        'listing_location': listing[3],
-        'listing_price': _parseDouble(listing[1]),
-        'bid_amount': bidAmount,
-        'status': status,
-        'message': message,
+        'id': transactionId,
         'user_id': userId,
+        'transaction_type': data['transaction_type'],
+        'amount': data['amount'],
+        'description': data['description'] ?? '',
+        'status': data['status'] ?? 'completed',
+        'created_at': data['created_at'] ?? DateTime.now().toIso8601String(),
       });
       
-      return _cors(Response.ok(
-        jsonEncode({'id': bidId, 'status': 'success', 'message': 'Bid created successfully'}),
-        headers: {'Content-Type': 'application/json'},
-      ));
-    } catch (e) {
-      print('Error creating bid: $e');
-      return _cors(Response.internalServerError(
-        body: jsonEncode({'error': 'Failed to create bid'}),
-        headers: {'Content-Type': 'application/json'},
-      ));
-    }
-  });
-
-  // Update bid status endpoint
-  router.patch('/bids/<bidId>/status', (Request request, String bidId) async {
-    try {
-      final payload = await request.readAsString();
-      final data = jsonDecode(payload);
-      
-      final status = data['status'];
-      final message = data['message'];
-      
-      await db.execute('''
-        UPDATE bids
-        SET status = @status, response_message = @message, response_date = CURRENT_TIMESTAMP
-        WHERE id = @bid_id
-      ''', substitutionValues: {
-        'status': status,
-        'message': message,
-        'bid_id': bidId,
-      });
-      
-      return _cors(Response.ok(
-        jsonEncode({'status': 'success', 'message': 'Bid status updated successfully'}),
-        headers: {'Content-Type': 'application/json'},
-      ));
-    } catch (e) {
-      print('Error updating bid status: $e');
-      return _cors(Response.internalServerError(
-        body: jsonEncode({'error': 'Failed to update bid status'}),
-        headers: {'Content-Type': 'application/json'},
-      ));
-    }
-  });
-
-  // Delete bid endpoint
-  router.delete('/bids/<bidId>', (Request request, String bidId) async {
-    try {
-      await db.execute('''
-        DELETE FROM bids WHERE id = @bid_id
-      ''', substitutionValues: {'bid_id': bidId});
-      
-      return _cors(Response.ok(
-        jsonEncode({'status': 'success', 'message': 'Bid deleted successfully'}),
-        headers: {'Content-Type': 'application/json'},
-      ));
-    } catch (e) {
-      print('Error deleting bid: $e');
-      return _cors(Response.internalServerError(
-        body: jsonEncode({'error': 'Failed to delete bid'}),
-        headers: {'Content-Type': 'application/json'},
-      ));
-    }
-  });
-
-  // Get bid by ID endpoint
-  router.get('/bids/<bidId>', (Request request, String bidId) async {
-    try {
-      final results = await db.query('''
-        SELECT id, listing_id, listing_title, listing_image, listing_category,
-               listing_location, listing_price, bid_amount, status, created_at,
-               response_message, response_date, user_id
-        FROM bids
-        WHERE id = @bid_id
-      ''', substitutionValues: {'bid_id': bidId});
-      
-      if (results.isEmpty) {
-        return _cors(Response.notFound(
-          jsonEncode({'error': 'Bid not found'}),
-          headers: {'Content-Type': 'application/json'},
-        ));
+      // Update user financial data based on transaction type
+      if (data['transaction_type'] == 'credit') {
+        await db.execute('''
+          UPDATE user_financial_data
+          SET total_funds = total_funds + @amount
+          WHERE user_id = @user_id
+        ''', substitutionValues: {
+          'user_id': userId,
+          'amount': data['amount'],
+        });
+      } else if (data['transaction_type'] == 'debit') {
+        await db.execute('''
+          UPDATE user_financial_data
+          SET total_funds = total_funds - @amount
+          WHERE user_id = @user_id
+        ''', substitutionValues: {
+          'user_id': userId,
+          'amount': data['amount'],
+        });
       }
       
-      final row = results.first;
-      final bid = {
-        'id': row[0],
-        'listing_id': row[1],
-        'listing_title': row[2],
-        'listing_image': row[3],
-        'listing_category': row[4],
-        'listing_location': row[5],
-        'listing_price': _parseDouble(row[6]),
-        'bid_amount': _parseDouble(row[7]),
-        'status': row[8],
-        'created_at': (row[9] as DateTime).toIso8601String(),
-        'response_message': row[10],
-        'response_date': row[11] != null ? (row[11] as DateTime).toIso8601String() : null,
-        'user_id': row[12],
-      };
+      // Get the created transaction
+      final result = await db.mappedResultsQuery(
+        'SELECT * FROM financial_transactions WHERE id = @id',
+        substitutionValues: {'id': transactionId},
+      );
       
-      return _cors(Response.ok(
-        jsonEncode(bid),
-        headers: {'Content-Type': 'application/json'},
-      ));
-    } catch (e) {
-      print('Error fetching bid: $e');
-      return _cors(Response.internalServerError(
-        body: jsonEncode({'error': 'Failed to fetch bid'}),
-        headers: {'Content-Type': 'application/json'},
-      ));
-    }
-  });
-
-  // Get bids for a listing endpoint
-  router.get('/listings/<listingId>/bids', (Request request, String listingId) async {
-    try {
-      final results = await db.query('''
-        SELECT id, listing_id, listing_title, listing_image, listing_category,
-               listing_location, listing_price, bid_amount, status, created_at,
-               response_message, response_date, user_id
-        FROM bids
-        WHERE listing_id = @listing_id
-        ORDER BY created_at DESC
-      ''', substitutionValues: {'listing_id': listingId});
-      
-      final bids = results.map((row) {
-        return {
-          'id': row[0],
-          'listing_id': row[1],
-          'listing_title': row[2],
-          'listing_image': row[3],
-          'listing_category': row[4],
-          'listing_location': row[5],
-          'listing_price': _parseDouble(row[6]),
-          'bid_amount': _parseDouble(row[7]),
-          'status': row[8],
-          'created_at': (row[9] as DateTime).toIso8601String(),
-          'response_message': row[10],
-          'response_date': row[11] != null ? (row[11] as DateTime).toIso8601String() : null,
-          'user_id': row[12],
-        };
-      }).toList();
-      
-      return _cors(Response.ok(
-        jsonEncode(bids),
-        headers: {'Content-Type': 'application/json'},
-      ));
-    } catch (e) {
-      print('Error fetching listing bids: $e');
-      return _cors(Response.internalServerError(
-        body: jsonEncode({'error': 'Failed to fetch listing bids'}),
-        headers: {'Content-Type': 'application/json'},
-      ));
-    }
-  });
-
-  // Update listing status endpoint
-  router.patch('/properties/<listingId>/status', (Request request, String listingId) async {
-    try {
-      final payload = await request.readAsString();
-      final data = jsonDecode(payload);
-      
-      final status = data['status'];
-      
-      await db.execute('''
-        UPDATE properties
-        SET status = @status, updated_at = CURRENT_TIMESTAMP
-        WHERE property_id = @listing_id
-      ''', substitutionValues: {
-        'status': status,
-        'listing_id': listingId,
-      });
-      
-      return _cors(Response.ok(
-        jsonEncode({'status': 'success', 'message': 'Listing status updated successfully'}),
-        headers: {'Content-Type': 'application/json'},
-      ));
-    } catch (e) {
-      print('Error updating listing status: $e');
-      return _cors(Response.internalServerError(
-        body: jsonEncode({'error': 'Failed to update listing status'}),
-        headers: {'Content-Type': 'application/json'},
-      ));
-    }
-  });
-
-  // Delete listing endpoint
-  router.delete('/properties/<listingId>', (Request request, String listingId) async {
-    try {
-      await db.execute('''
-        DELETE FROM properties WHERE property_id = @listing_id
-      ''', substitutionValues: {'listing_id': listingId});
-      
-      return _cors(Response.ok(
-        jsonEncode({'status': 'success', 'message': 'Listing deleted successfully'}),
-        headers: {'Content-Type': 'application/json'},
-      ));
-    } catch (e) {
-      print('Error deleting listing: $e');
-      return _cors(Response.internalServerError(
-        body: jsonEncode({'error': 'Failed to delete listing'}),
-        headers: {'Content-Type': 'application/json'},
-      ));
-    }
-  });
-
-  // Get listing by ID endpoint
-  router.get('/properties/<listingId>', (Request request, String listingId) async {
-    try {
-      final results = await db.query('''
-        SELECT property_id, title, price, location, category, user_id, description,
-               condition, quantity, type, address, lister_name, lister_email,
-               lister_whatsapp, images, latitude, longitude, is_active, is_verified,
-               status, created_at, updated_at
-        FROM properties
-        WHERE property_id = @listing_id
-      ''', substitutionValues: {'listing_id': listingId});
-      
-      if (results.isEmpty) {
-        return _cors(Response.notFound(
-          jsonEncode({'error': 'Listing not found'}),
-          headers: {'Content-Type': 'application/json'},
-        ));
+      if (result.isEmpty) {
+        return Response.internalServerError(
+          body: jsonEncode({'error': 'Failed to fetch created transaction'}),
+          headers: {'Content-Type': 'application/json'}
+        );
       }
       
-      final row = results.first;
-      List<String> imagesList = [];
-      if (row[14] != null) {
-        try {
-          final decoded = jsonDecode(row[14] as String);
-          if (decoded is List) {
-            imagesList = decoded.cast<String>();
+      final transaction = _convertDateTimes(result.first['financial_transactions'] ?? {});
+      
+      return Response.ok(
+        jsonEncode({
+          'success': true,
+          'transaction': transaction,
+          'message': 'Transaction recorded successfully'
+        }),
+        headers: {'Content-Type': 'application/json'}
+      );
+      
+    } catch (e) {
+      print('Error recording transaction: $e');
+      return Response.internalServerError(
+        body: jsonEncode({'error': 'Failed to record transaction'}),
+        headers: {'Content-Type': 'application/json'}
+      );
+    }
+  });
+
+  // Handle 404 routes
+  router.all('/<ignored|.*>', (Request req) {
+    return Response.notFound(jsonEncode({'error': 'Route not found: ${req.url}'}), headers: {'Content-Type': 'application/json'});
+  });
+
+  // Create the handler pipeline
+  final handler = Pipeline()
+      .addMiddleware(logRequests())
+      .addMiddleware((innerHandler) {
+        return (request) async {
+          if (request.method == 'OPTIONS') {
+            return _cors(Response.ok(''));
           }
-        } catch (e) {
-          print('Error parsing images JSON: $e');
-        }
-      }
-
-      final listing = {
-        'id': row[0],
-        'property_id': row[0],
-        'title': row[1],
-        'price': _parseDouble(row[2]),
-        'location': row[3],
-        'category': row[4],
-        'user_id': row[5],
-        'description': row[6],
-        'condition': row[7],
-        'quantity': row[8],
-        'type': row[9],
-        'address': row[10],
-        'lister_name': row[11],
-        'lister_email': row[12],
-        'lister_whatsapp': row[13],
-        'images': imagesList,
-        'latitude': row[15] != null ? _parseDouble(row[15]) : null,
-        'longitude': row[16] != null ? _parseDouble(row[16]) : null,
-        'is_active': row[17] ?? false,
-        'is_verified': row[18] ?? false,
-        'status': row[19] ?? 'active',
-        'created_at': (row[20] as DateTime).toIso8601String(),
-        'updated_at': (row[21] as DateTime).toIso8601String(),
-      };
-      
-      return _cors(Response.ok(
-        jsonEncode(listing),
-        headers: {'Content-Type': 'application/json'},
-      ));
-    } catch (e) {
-      print('Error fetching listing: $e');
-      return _cors(Response.internalServerError(
-        body: jsonEncode({'error': 'Failed to fetch listing'}),
-        headers: {'Content-Type': 'application/json'},
-      ));
-    }
-  });
-
-  // Search listings endpoint
-  router.get('/properties/search', (Request request) async {
-    try {
-      final query = request.url.queryParameters['q'] ?? '';
-      
-      if (query.isEmpty) {
-        return _cors(Response.badRequest(
-          body: jsonEncode({'error': 'Search query is required'}),
-          headers: {'Content-Type': 'application/json'},
-        ));
-      }
-      
-      final results = await db.query('''
-        SELECT property_id, title, price, location, category, user_id, description,
-               condition, quantity, type, address, lister_name, lister_email,
-               lister_whatsapp, images, latitude, longitude, is_active, is_verified,
-               status, created_at, updated_at
-        FROM properties
-        WHERE (title ILIKE @query OR description ILIKE @query OR location ILIKE @query)
-          AND is_active = true
-        ORDER BY created_at DESC
-      ''', substitutionValues: {'query': '%$query%'});
-      
-      final listings = results.map((row) {
-        List<String> imagesList = [];
-        if (row[14] != null) {
-          try {
-            final decoded = jsonDecode(row[14] as String);
-            if (decoded is List) {
-              imagesList = decoded.cast<String>();
-            }
-          } catch (e) {
-            print('Error parsing images JSON: $e');
-          }
-        }
-
-        return {
-          'id': row[0],
-          'property_id': row[0],
-          'title': row[1],
-          'price': _parseDouble(row[2]),
-          'location': row[3],
-          'category': row[4],
-          'user_id': row[5],
-          'description': row[6],
-          'condition': row[7],
-          'quantity': row[8],
-          'type': row[9],
-          'address': row[10],
-          'lister_name': row[11],
-          'lister_email': row[12],
-          'lister_whatsapp': row[13],
-          'images': imagesList,
-          'latitude': row[15] != null ? _parseDouble(row[15]) : null,
-          'longitude': row[16] != null ? _parseDouble(row[16]) : null,
-          'is_active': row[17] ?? false,
-          'is_verified': row[18] ?? false,
-          'status': row[19] ?? 'active',
-          'created_at': (row[20] as DateTime).toIso8601String(),
-          'updated_at': (row[21] as DateTime).toIso8601String(),
+          final response = await innerHandler(request);
+          return _cors(response);
         };
-      }).toList();
-      
-      return _cors(Response.ok(
-        jsonEncode(listings),
-        headers: {'Content-Type': 'application/json'},
-      ));
-    } catch (e) {
-      print('Error searching listings: $e');
-      return _cors(Response.internalServerError(
-        body: jsonEncode({'error': 'Failed to search listings'}),
-        headers: {'Content-Type': 'application/json'},
-      ));
-    }
-  });
+      })
+      .addHandler(router);
 
-  // Existing endpoints...
-  router.get('/properties', (Request req) async {
-    try {
-      final results = await db.query('SELECT * FROM properties ORDER BY created_at DESC');
-      final properties = results.map((row) {
-        final map = Map.fromIterables(
-          results.columnDescriptions.map((c) => c.columnName),
-          row,
-        );
-        return _convertDateTimes(map);
-      }).toList();
-      
-      return _cors(Response.ok(jsonEncode(properties), headers: {
-        'Content-Type': 'application/json',
-      }));
-    } catch (e) {
-      return _cors(Response.internalServerError(
-        body: jsonEncode({'error': 'Error fetching properties: $e'}),
-      ));
-    }
-  });
-
-  router.post('/properties', (Request req) async {
-    return _cors(await handlePostProperty(req, db));
-  });
-
-  // Get property by ID
-  router.get('/properties/<propertyId>', (Request req, String propertyId) async {
-    try {
-      final results = await db.query('''
-        SELECT * FROM properties WHERE property_id = @property_id
-      ''', substitutionValues: {'property_id': propertyId});
-      if (results.isEmpty) {
-        return _cors(Response.notFound(
-          jsonEncode({'error': 'Property not found'}),
-          headers: {'Content-Type': 'application/json'},
-        ));
-      }
-      final row = results.first;
-      final map = Map.fromIterables(
-        results.columnDescriptions.map((c) => c.columnName),
-        row,
-      );
-      final property = _convertDateTimes(map);
-      return _cors(Response.ok(jsonEncode(property), headers: {
-        'Content-Type': 'application/json',
-      }));
-    } catch (e) {
-      return _cors(Response.internalServerError(
-        body: jsonEncode({'error': 'Error fetching property: $e'}),
-        headers: {'Content-Type': 'application/json'},
-      ));
-    }
-  });
-
-  //Get properties by category
-  router.get('/properties/category/<category>', (Request req, String category) async {
-    try {
-      final results = await db.query('''
-        SELECT * FROM properties WHERE category = @category ORDER BY created_at DESC
-      ''', substitutionValues: {'category': category});
-      final properties = results.map((row) {
-        final map = Map.fromIterables(
-          results.columnDescriptions.map((c) => c.columnName),
-          row,
-        );
-        return _convertDateTimes(map);
-      }).toList();
-      
-      return _cors(Response.ok(jsonEncode(properties), headers: {
-        'Content-Type': 'application/json',
-      }));
-    } catch (e) {
-      return _cors(Response.internalServerError(
-        body: jsonEncode({'error': 'Error fetching properties by category: $e'}),
-        headers: {'Content-Type': 'application/json'},
-      ));
-    }
-  });
-
-  //Get user by email
-  router.get('/users/email/<email>', (Request req, String email) async {
-    try {
-      final results = await db.query('''
-        SELECT * FROM users WHERE email = @user_email
-      ''', substitutionValues: {'user_email': email});
-      if (results.isEmpty) {
-        return _cors(Response.notFound(
-          jsonEncode({'error': 'User not found'}),
-          headers: {'Content-Type': 'application/json'},
-        ));
-      }
-      final row = results.first;
-      final map = Map.fromIterables(
-        results.columnDescriptions.map((c) => c.columnName),
-        row,
-      );
-      final user = {
-        'id': map['id'],
-        'name': map['name'],
-        'email': map['email'],
-        'phone': map['phone'],
-        'created_at': (map['created_at'] as DateTime).toIso8601String(),
-        'updated_at': (map['updated_at'] as DateTime).toIso8601String(),
-      };
-      return _cors(Response.ok(jsonEncode(user), headers: {
-        'Content-Type': 'application/json',
-      }));
-    } catch (e) {
-      return _cors(Response.internalServerError(
-        body: jsonEncode({'error': 'Error fetching user by email: $e'}),
-        headers: {'Content-Type': 'application/json'},
-      ));
-    }
-  });
-
-  //Get user by ID
-  router.get('/users/<userId>', (Request req, String userId) async {
-    try {
-      final results = await db.query('''
-        SELECT * FROM users WHERE id = @user_id
-      ''', substitutionValues: {'user_id': userId});
-      if (results.isEmpty) {
-        return _cors(Response.notFound(
-          jsonEncode({'error': 'User not found'}),
-          headers: {'Content-Type': 'application/json'},
-        ));
-      }
-      final row = results.first;
-      final map = Map.fromIterables(
-        results.columnDescriptions.map((c) => c.columnName),
-        row,
-      );
-      final user = {
-        'id': map['id'],
-        'name': map['name'],
-        'email': map['email'],
-        'phone': map['phone'],
-        'created_at': (map['created_at'] as DateTime).toIso8601String(),
-        'updated_at': (map['updated_at'] as DateTime).toIso8601String(),
-      };
-      return _cors(Response.ok(jsonEncode(user), headers: {
-        'Content-Type': 'application/json',
-      }));
-    } catch (e) {
-      return _cors(Response.internalServerError(
-        body: jsonEncode({'error': 'Error fetching user by ID: $e'}),
-        headers: {'Content-Type': 'application/json'},
-      ));
-    }
-  });
-
-  // User endpoints
-  router.get('/users', (Request req) async {
-    try {
-      final results = await db.query('SELECT * FROM users ORDER BY created_at DESC');
-      final users = results.map((row) {
-        final map = Map.fromIterables(
-          results.columnDescriptions.map((c) => c.columnName),
-          row,
-        );
-        return {
-          'id': map['id'],
-          'name': map['name'],
-          'email': map['email'],
-          'phone': map['phone'],
-          'created_at': (map['created_at'] as DateTime).toIso8601String(),
-          'updated_at': (map['updated_at'] as DateTime).toIso8601String(),
-        };
-      }).toList();
-      return _cors(Response.ok(jsonEncode(users), headers: {
-        'Content-Type': 'application/json',
-      }));
-    } catch (e) {
-      return _cors(Response.internalServerError(
-        body: jsonEncode({'error': 'Error fetching users: $e'}),
-        headers: {'Content-Type': 'application/json'},
-      ));
-    }
-  });
-
-  router.post('/users', (Request req) async {
-    try {
-      final body = await req.readAsString();
-      final userData = jsonDecode(body);
-      final id = Uuid().v4();
-      final name = userData['name'];
-      final email = userData['email'];
-      final phone = userData['phone'];
-      final createdAt = DateTime.now().toIso8601String();
-      await db.execute('''
-        INSERT INTO users (id, name, email, phone, created_at)
-        VALUES (@id, @name, @user_email, @phone, @created_at)
-      ''', substitutionValues: {
-        'id': id,
-        'name': name,
-        'user_email': email,
-        'phone': phone,
-        'created_at': createdAt,
-      });
-      return _cors(Response.ok(jsonEncode({
-        'status': 'success',
-        'message': 'User created successfully',
-        'id': id,
-      }), headers: {
-        'Content-Type': 'application/json',
-      }));
-    } catch (e) {
-      return _cors(Response.internalServerError(
-        body: jsonEncode({'error': 'Error creating user: $e'}),
-        headers: {'Content-Type': 'application/json'},
-      ));
-    }
-  });
-  router.patch('/users/<userId>', (Request req, String userId) async {
-    try {
-      final body = await req.readAsString();
-      final userData = jsonDecode(body);
-      final name = userData['name'];
-      final email = userData['email'];
-      final phone = userData['phone'];
-      
-      await db.execute('''
-        UPDATE users
-        SET name = @name, email = @user_email, phone = @phone, updated_at = CURRENT_TIMESTAMP
-        WHERE id = @user_id
-      ''', substitutionValues: {
-        'name': name,
-        'user_email': email,
-        'phone': phone,
-        'user_id': userId,
-      });
-      
-      return _cors(Response.ok(jsonEncode({
-        'status': 'success',
-        'message': 'User updated successfully',
-      }), headers: {
-        'Content-Type': 'application/json',
-      }));
-    } catch (e) {
-      return _cors(Response.internalServerError(
-        body: jsonEncode({'error': 'Error updating user: $e'}),
-        headers: {'Content-Type': 'application/json'},
-      ));
-    }
-  });
-
-  router.delete('/users/<userId>', (Request req, String userId) async {
-    try {
-      await db.execute('''
-        DELETE FROM users WHERE id = @user_id
-      ''', substitutionValues: {'user_id': userId});
-      
-      return _cors(Response.ok(jsonEncode({
-        'status': 'success',
-        'message': 'User deleted successfully',
-      }), headers: {
-        'Content-Type': 'application/json',
-      }));
-    } catch (e) {
-      return _cors(Response.internalServerError(
-        body: jsonEncode({'error': 'Error deleting user: $e'}),
-        headers: {'Content-Type': 'application/json'},
-      ));
-    }
-  });
-
-  // Poll properties endpoints
-  router.get('/poll-properties', (Request req) async {
-    try {
-      final results = await db.query('SELECT * FROM poll_properties ORDER BY created_at DESC');
-      final pollProperties = results.map((row) {
-        final map = Map.fromIterables(
-          results.columnDescriptions.map((c) => c.columnName),
-          row,
-        );
-        
-        // Parse suggestions JSON
-        List<Map<String, dynamic>> suggestions = [];
-        if (map['suggestions'] != null) {
-          try {
-            final suggestionsJson = jsonDecode(map['suggestions']);
-            if (suggestionsJson is List) {
-              suggestions = suggestionsJson.cast<Map<String, dynamic>>();
-            }
-          } catch (e) {
-            print('Error parsing suggestions: $e');
-          }
-        }
-        
-        return PollProperty(
-          id: map['id'],
-          title: map['title'],
-          location: map['location'],
-          imageUrl: map['image_url'],
-          suggestions: suggestions,
-        ).toJson();
-      }).toList();
-      
-      return _cors(Response.ok(jsonEncode(pollProperties), headers: {
-        'Content-Type': 'application/json',
-      }));
-    } catch (e) {
-      return _cors(Response.internalServerError(
-        body: jsonEncode({'error': 'Error fetching poll properties: $e'}),
-      ));
-    }
-  });
-
-  router.post('/poll-properties', (Request req) async {
-    try {
-      final body = await req.readAsString();
-      final pollData = jsonDecode(body);
-      
-      final id = Uuid().v4();
-      final title = pollData['title'];
-      final location = pollData['location'];
-      final imageUrl = pollData['image_url'];
-      final suggestions = jsonEncode(pollData['suggestions'] ?? []);
-
-      await db.execute('''
-        INSERT INTO poll_properties (id, title, location, image_url, suggestions)
-        VALUES (@id, @title, @location, @image_url, @suggestions)
-      ''', substitutionValues: {
-        'id': id,
-        'title': title,
-        'location': location,
-        'image_url': imageUrl,
-        'suggestions': suggestions,
-      });
-
-      return _cors(Response.ok(jsonEncode({
-        'status': 'success',
-        'message': 'Poll property created successfully',
-        'id': id,
-      }), headers: {
-        'Content-Type': 'application/json',
-      }));
-    } catch (e) {
-      return _cors(Response.internalServerError(
-        body: jsonEncode({'error': 'Error creating poll property: $e'}),
-      ));
-    }
-  });
-
-  router.post('/poll-properties/<pollId>/vote', (Request req, String pollId) async {
-    try {
-      final body = await req.readAsString();
-      final voteData = jsonDecode(body);
-      
-      final userId = voteData['user_id'];
-      final suggestion = voteData['suggestion'];
-
-      // Check if user has already voted for this poll
-      final existingVote = await db.query('''
-        SELECT id FROM poll_user_votes 
-        WHERE user_id = @user_id AND poll_property_id = @poll_id
-      ''', substitutionValues: {
-        'user_id': userId,
-        'poll_id': pollId,
-      });
-
-      if (existingVote.isNotEmpty) {
-        return _cors(Response.badRequest(
-          body: jsonEncode({'error': 'User has already voted for this poll'}),
-        ));
-      }
-
-      // Record the vote
-      final voteId = Uuid().v4();
-      await db.execute('''
-        INSERT INTO poll_user_votes (id, user_id, suggestion, poll_property_id)
-        VALUES (@id, @user_id, @suggestion, @poll_id)
-      ''', substitutionValues: {
-        'id': voteId,
-        'user_id': userId,
-        'suggestion': suggestion,
-        'poll_id': pollId,
-      });
-
-      return _cors(Response.ok(jsonEncode({
-        'status': 'success',
-        'message': 'Vote recorded successfully',
-      }), headers: {
-        'Content-Type': 'application/json',
-      }));
-    } catch (e) {
-      return _cors(Response.internalServerError(
-        body: jsonEncode({'error': 'Error recording vote: $e'}),
-      ));
-    }
-  });
-
-  router.get('/poll-properties/<pollId>/results', (Request req, String pollId) async {
-    try {
-      final results = await db.query('''
-        SELECT suggestion, COUNT(*) as vote_count
-        FROM poll_user_votes
-        WHERE poll_property_id = @poll_id
-        GROUP BY suggestion
-        ORDER BY vote_count DESC
-      ''', substitutionValues: {
-        'poll_id': pollId,
-      });
-
-      final pollResults = results.map((row) {
-        return {
-          'suggestion': row[0],
-          'votes': row[1],
-        };
-      }).toList();
-
-      return _cors(Response.ok(jsonEncode(pollResults), headers: {
-        'Content-Type': 'application/json',
-      }));
-    } catch (e) {
-      return _cors(Response.internalServerError(
-        body: jsonEncode({'error': 'Error fetching poll results: $e'}),
-      ));
-    }
-  });
-
-  // Investment endpoints
-  router.get('/investments', fetchInvestments);
-  router.post('/investments', createInvestment);
-
-  // User endpoints
-  router.post('/register', (Request req) async {
-    try {
-      final body = await req.readAsString();
-      final userData = jsonDecode(body);
-      
-      final firstName = userData['firstName'];
-      final lastName = userData['lastName'];
-      final email = userData['email'];
-      final password = userData['password'];
-      final phoneNumber = userData['phoneNumber'];
-      final hashedPassword = hashPassword(password);
-
-      // Check if user already exists
-      final existingUser = await db.query(
-        'SELECT id FROM users WHERE email = @email',
-        substitutionValues: {'email': email},
-      );
-
-      if (existingUser.isNotEmpty) {
-        return _cors(Response.badRequest(
-          body: jsonEncode({'error': 'User with this email already exists'}),
-        ));
-      }
-
-      // Insert new user
-      await db.execute('''
-        INSERT INTO users (first_name, last_name, email, password_hash, phone_number)
-        VALUES (@firstName, @lastName, @email, @password, @phoneNumber)
-      ''', substitutionValues: {
-        'firstName': firstName,
-        'lastName': lastName,
-        'email': email,
-        'password': hashedPassword,
-        'phoneNumber': phoneNumber,
-      });
-
-      return _cors(Response.ok(jsonEncode({
-        'status': 'success',
-        'message': 'User registered successfully',
-      }), headers: {
-        'Content-Type': 'application/json',
-      }));
-    } catch (e) {
-      return _cors(Response.internalServerError(
-        body: jsonEncode({'error': 'Registration failed: $e'}),
-      ));
-    }
-  });
-
-  router.post('/login', (Request req) async {
-    try {
-      final body = await req.readAsString();
-      final loginData = jsonDecode(body);
-      
-      final email = loginData['email'];
-      final password = loginData['password'];
-
-      // Find user by email
-      final userResults = await db.query(
-        'SELECT id, first_name, last_name, email, password_hash, phone_number, avatar_url, rc_number, official_agency_name FROM users WHERE email = @email',
-        substitutionValues: {'email': email},
-      );
-
-      if (userResults.isEmpty) {
-        return _cors(Response.badRequest(
-          body: jsonEncode({'error': 'Invalid email or password'}),
-        ));
-      }
-
-      final user = userResults.first;
-      final storedHash = user[4] as String;
-
-      if (!verifyPassword(password, storedHash)) {
-        return _cors(Response.badRequest(
-          body: jsonEncode({'error': 'Invalid email or password'}),
-        ));
-      }
-
-      // Return user data (excluding password)
-      final userData = {
-        'id': user[0],
-        'firstName': user[1],
-        'lastName': user[2],
-        'email': user[3],
-        'phoneNumber': user[5],
-        'avatarUrl': user[6],
-        'rcNumber': user[7],
-        'officialAgencyName': user[8],
-      };
-
-      return _cors(Response.ok(jsonEncode({
-        'status': 'success',
-        'message': 'Login successful',
-        'user': userData,
-      }), headers: {
-        'Content-Type': 'application/json',
-      }));
-    } catch (e) {
-      return _cors(Response.internalServerError(
-        body: jsonEncode({'error': 'Login failed: $e'}),
-      ));
-    }
-  });
-
-  router.get('/users/id/<userId>', (Request req, String userId) async {
-    try {
-      final userResults = await db.query(
-        'SELECT id, first_name, last_name, email, phone_number, avatar_url, rc_number, official_agency_name FROM users WHERE id = @id',
-        substitutionValues: {'id': int.parse(userId)},
-      );
-
-      if (userResults.isEmpty) {
-        return _cors(Response.notFound(
-          jsonEncode({'error': 'User not found'}),
-        ));
-      }
-
-      final user = userResults.first;
-      final userData = {
-        'id': user[0],
-        'firstName': user[1],
-        'lastName': user[2],
-        'email': user[3],
-        'phoneNumber': user[4],
-        'avatarUrl': user[5],
-        'rcNumber': user[6],
-        'officialAgencyName': user[7],
-      };
-
-      return _cors(Response.ok(jsonEncode(userData), headers: {
-        'Content-Type': 'application/json',
-      }));
-    } catch (e) {
-      return _cors(Response.internalServerError(
-        body: jsonEncode({'error': 'Error fetching user: $e'}),
-      ));
-    }
-  });
-
-  router.put('/users/id/<userId>', (Request req, String userId) async {
-    try {
-      final body = await req.readAsString();
-      final updateData = jsonDecode(body);
-      
-      // Build dynamic update query
-      final updates = <String>[];
-      final substitutionValues = <String, dynamic>{'id': int.parse(userId)};
-      
-      if (updateData['firstName'] != null) {
-        updates.add('first_name = @firstName');
-        substitutionValues['firstName'] = updateData['firstName'];
-      }
-      if (updateData['lastName'] != null) {
-        updates.add('last_name = @lastName');
-        substitutionValues['lastName'] = updateData['lastName'];
-      }
-      if (updateData['email'] != null) {
-        updates.add('email = @email');
-        substitutionValues['email'] = updateData['email'];
-      }
-      if (updateData['phoneNumber'] != null) {
-        updates.add('phone_number = @phoneNumber');
-        substitutionValues['phoneNumber'] = updateData['phoneNumber'];
-      }
-      if (updateData['avatarUrl'] != null) {
-        updates.add('avatar_url = @avatarUrl');
-        substitutionValues['avatarUrl'] = updateData['avatarUrl'];
-      }
-      if (updateData['rcNumber'] != null) {
-        updates.add('rc_number = @rcNumber');
-        substitutionValues['rcNumber'] = updateData['rcNumber'];
-      }
-      if (updateData['officialAgencyName'] != null) {
-        updates.add('official_agency_name = @officialAgencyName');
-        substitutionValues['officialAgencyName'] = updateData['officialAgencyName'];
-      }
-
-      if (updates.isEmpty) {
-        return _cors(Response.badRequest(
-          body: jsonEncode({'error': 'No valid fields to update'}),
-        ));
-      }
-
-      final query = 'UPDATE users SET ${updates.join(', ')} WHERE id = @id';
-      await db.execute(query, substitutionValues: substitutionValues);
-
-      return _cors(Response.ok(jsonEncode({
-        'status': 'success',
-        'message': 'User updated successfully',
-      }), headers: {
-        'Content-Type': 'application/json',
-      }));
-    } catch (e) {
-      return _cors(Response.internalServerError(
-        body: jsonEncode({'error': 'Error updating user: $e'}),
-      ));
-    }
-  });
-
-  // Paystack endpoints
-  router.post('/paystack/initialize', handlePaystackInitialize);
-  router.post('/paystack/verify', handlePaystackVerify);
-  router.post('/webhook', handlePaystackWebhook);
-
-  // Image upload endpoint
-  router.post('/upload-image', handleUploadImage);
-
-  // Health check endpoint
-  router.get('/health', (Request req) {
-    return _cors(Response.ok(jsonEncode({
-      'status': 'healthy',
-      'timestamp': DateTime.now().toIso8601String(),
-    }), headers: {
-      'Content-Type': 'application/json',
-    }));
-  });
-
-  // Start the server
-  final ip = InternetAddress.anyIPv4;
   final port = int.parse(Platform.environment['PORT'] ?? '8080');
-  final server = await serve(router, ip, port);
+  final server = await serve(handler, InternetAddress.anyIPv4, port);
   print('Server listening on port ${server.port}');
 }
