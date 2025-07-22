@@ -157,21 +157,40 @@ Future<Response> handlePostProperty(Request request, PostgreSQLConnection connec
     final images = data['images'] != null ? jsonEncode(data['images']) : null;
     final latitude = data['latitude'];
     final longitude = data['longitude'];
+    final landType = data['landType'];
+    final bedrooms = data['bedrooms'];
+    final bathrooms = data['bathrooms'];
+    final toilets = data['toilets'];
+    final parkingSpaces = data['parkingSpaces'];
+    final internet = data['internetValue'] ?? false;
+    final electricity = data['electricityValue'] ?? false;
+    final landSize = data['landSize'];
+    final landTitle = data['landtitle'];
     final isActive = data['is_active'] ?? true;
     final isVerified = data['is_verified'] ?? false;
 
     // Insert into database
     await connection.query('''
       INSERT INTO properties (
-        property_id, title, price, location, category, user_id,
-        description, condition, quantity, type, address,
-        lister_name, lister_email, lister_whatsapp, images,
-        latitude, longitude, is_active, is_verified, created_at, updated_at
+        title, category, description, land_type,
+        bedrooms, bathrooms, toilets, parking_spaces,
+        internet, electricity, land_size, land_title,
+        price, market_value, status, location, latitude, longitude,
+        quantity, condition, terms_and_conditions, images,
+        is_urgent, urgency_data, is_bidding, bidding_data,
+        target_demography, demography_data,
+        user_id, lister_name, lister_email, address, lister_whatsapp,
+        created_at, updated_at
       ) VALUES (
-        @property_id, @title, @price, @location, @category, @user_id,
-        @description, @condition, @quantity, @type, @address,
-        @lister_name, @lister_email, @lister_whatsapp, @images,
-        @latitude, @longitude, @is_active, @is_verified, NOW(), NOW()
+        @title, @category, @description, @land_type,
+        @bedrooms, @bathrooms, @toilets, @parking_spaces,
+        @internet, @electricity, @land_size, @land_title,
+        @price, @market_value, @status, @location, @latitude, @longitude,
+        @quantity, @condition, @terms_and_conditions, @images,
+        @is_urgent, @urgency_data, @is_bidding, @bidding_data,
+        @target_demography, @demography_data,
+        @user_id, @lister_name, @lister_email, @address, @lister_whatsapp,
+        NOW(), NOW()
       )
     ''', substitutionValues: {
       'property_id': propertyId,
@@ -193,6 +212,24 @@ Future<Response> handlePostProperty(Request request, PostgreSQLConnection connec
       'longitude': longitude,
       'is_active': isActive,
       'is_verified': isVerified,
+      'land_type': landType,
+      'bedrooms': bedrooms,
+      'bathrooms': bathrooms,
+      'toilets': toilets,
+      'parking_spaces': parkingSpaces,
+      'internet': internet,
+      'electricity': electricity,
+      'land_size': landSize,
+      'land_title': landTitle,
+      'terms_and_conditions': data['termsAndConditions'] ?? '',
+      'is_urgent': data['isUrgent'] ?? false,
+      'urgency_data': data['urgencyData'] != null ? jsonEncode(data['urgencyData']) : null,
+      'is_bidding': data['isBidding'] ?? false,
+      'bidding_data': data['biddingData'] != null ? jsonEncode(data['biddingData']) : null,
+      'target_demography': data['targetDemography'] != null ? jsonEncode(data['targetDemography']) : null,
+      'demography_data': data['demographyData'] != null ? jsonEncode(data['demographyData']) : null,
+      'created_at': DateTime.now().toIso8601String(),
+      'updated_at': DateTime.now().toIso8601String(),
     });
 
     return Response.ok(jsonEncode({'status': 'success', 'message': 'Property created successfully'}), headers: {
