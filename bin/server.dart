@@ -143,6 +143,7 @@ Future<Response> handlePostProperty(Request request, PostgreSQLConnection connec
     final propertyId = data['property_id'];
     final title = data['title'];
     final price = data['price'];
+    final market_value = data['market_value'] ?? 0.0;
     final location = data['location'];
     final category = data['category'];
     final userId = data['user_id'];
@@ -195,6 +196,7 @@ Future<Response> handlePostProperty(Request request, PostgreSQLConnection connec
     ''', substitutionValues: {
       'property_id': propertyId,
       'title': title,
+      'market_value': market_value,
       'price': price,
       'location': location,
       'category': category,
@@ -1777,11 +1779,6 @@ return Response.ok(jsonEncode(investments), headers: {
   router.get('/investments', (Request req) async {
     return fetchInvestments(req);
   });
-
-
-
-
-
 
 
   // CORS helper function
