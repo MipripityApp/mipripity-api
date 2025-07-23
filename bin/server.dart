@@ -155,7 +155,9 @@ Future<Response> handlePostProperty(Request request, PostgreSQLConnection connec
     final listerName = data['lister_name'];
     final listerEmail = data['lister_email'];
     final listerWhatsapp = data['lister_whatsapp'];
-    final images = data['images'] != null ? jsonEncode(data['images']) : null;
+    final List<String> images =
+    data['images'] != null ? List<String>.from(data['images']) : <String>[];
+    final String imagesJson = jsonEncode(images);
     final latitude = data['latitude'];
     final longitude = data['longitude'];
     final landType = data['landType'];
@@ -187,7 +189,7 @@ Future<Response> handlePostProperty(Request request, PostgreSQLConnection connec
         @bedrooms, @bathrooms, @toilets, @parking_spaces,
         @internet, @electricity, @land_size, @land_title,
         @price, @market_value, @status, @location, @latitude, @longitude,
-        @quantity, @condition, @terms_and_conditions, @images,
+        @quantity, @condition, @terms_and_conditions, @images::jsonb,
         @is_urgent, @urgency_data, @is_bidding, @bidding_data,
         @target_demography, @demography_data,
         @user_id, @lister_name, @lister_email, @address, @lister_whatsapp,
@@ -209,7 +211,7 @@ Future<Response> handlePostProperty(Request request, PostgreSQLConnection connec
       'lister_name': listerName,
       'lister_email': listerEmail,
       'lister_whatsapp': listerWhatsapp,
-      'images': images,
+      'images': imagesJson,
       'latitude': latitude,
       'longitude': longitude,
       'is_active': isActive,
