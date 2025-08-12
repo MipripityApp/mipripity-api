@@ -200,6 +200,7 @@ Future<Response> handlePostProperty(Request request, PostgreSQLConnection connec
       'title': title,
       'market_value': market_value,
       'price': price,
+      'status': 'available', // Default status
       'location': location,
       'category': category,
       'user_id': userId,
@@ -1389,6 +1390,454 @@ void main() async {
       );
     }
   });
+
+// .................................//
+// HomeScreen-specific API endpoints
+// ................................//
+
+// GET /user-financial-summary/:userId - Returns user's financial summary
+router.get('/user-financial-summary/<userId>', (Request req, String userId) async {
+  try {
+    final results = await db.mappedResultsQuery('''
+      SELECT 
+        COALESCE(balance, 0) as balance,
+        COALESCE(total_expenses, 0) as expenses,
+        COALESCE(total_savings, 0) as savings
+      FROM user_financial_data 
+      WHERE user_id = @user_id
+      ORDER BY updated_at DESC
+      LIMIT 1
+    ''', substitutionValues: {'user_id': userId});
+
+    if (results.isEmpty) {
+      return Response.ok(
+        jsonEncode({
+          'balance': 0,
+          'expenses': 0,
+          'savings': 0,
+        }),
+        headers: {'Content-Type': 'application/json'},
+      );
+    }
+
+    final data = results.first['user_financial_data'] ?? {};
+    return Response.ok(
+      jsonEncode({
+        'balance': data['balance'] ?? 0,
+        'expenses': data['expenses'] ?? 0,
+        'savings': data['savings'] ?? 0,
+      }),
+      headers: {'Content-Type': 'application/json'},
+    );
+  } catch (e) {
+    print('Error fetching financial summary: $e');
+    return Response.internalServerError(
+      body: jsonEncode({'error': 'Failed to fetch financial summary'}),
+      headers: {'Content-Type': 'application/json'},
+    );
+  }
+});
+
+// GET /user-properties/:userId - Returns user's properties
+router.get('/user-properties/<userId>', (Request req, String userId) async {
+  try {
+    final results = await db.mappedResultsQuery('''
+      SELECT * FROM properties 
+      WHERE user_id = @user_id AND status = 'active'
+      ORDER BY created_at DESC
+      LIMIT 10
+    ''', substitutionValues: {'user_id': userId});
+
+    final properties = results.map((row) => _convertDateTimes(row['properties'] ?? {})).toList();
+    return Response.ok(
+      jsonEncode({'properties': properties}),
+      headers: {'Content-Type': 'application/json'},
+    );
+  } catch (e) {
+    print('Error fetching user properties: $e');
+    return Response.internalServerError(
+      body: jsonEncode({'error': 'Failed to fetch user properties'}),
+      headers: {'Content-Type': 'application/json'},
+    );
+  }
+});
+
+// GET /nearby-properties - Returns properties near given coordinates
+router.get('/nearby-properties', (Request req) async {
+  try {
+    final params = req.url.queryParameters;
+    final lat = double.tryParse(params['lat'] ?? '');
+    final lng = double.tryParse(params['lng'] ?? '');
+    final radius = double.tryParse(params['radius'] ?? '10');
+
+    if (lat == null || lng == null) {
+      return Response.badRequest(
+        body: jsonEncode({'error': 'Missing lat or lng parameters'}),
+        headers: {'Content-Type': 'application/json'},
+      );
+    }
+
+    final results = await db.mappedResultsQuery('''
+      SELECT *, 
+        (6371 * acos(cos(radians(@lat)) * cos(radians(latitude)) * 
+        cos(radians(longitude) - radians(@lng)) + sin(radians(@lat)) * 
+        sin(radians(latitude)))) AS distance
+      FROM properties 
+      WHERE latitude IS NOT NULL AND longitude IS NOT NULL
+        AND status = 'active'
+      HAVING distance < @radius
+      ORDER BY distance
+      LIMIT 20
+    ''', substitutionValues: {
+      'lat': lat,
+      'lng': lng,
+      'radius': radius,
+    });
+
+    final properties = results.map((row) => _convertDateTimes(row['properties'] ?? {})).toList();
+    return Response.ok(
+      jsonEncode({'properties': properties}),
+      headers: {'Content-Type': 'application/json'},
+    );
+  } catch (e) {
+    print('Error fetching nearby properties: $e');
+    return Response.internalServerError(
+      body: jsonEncode({'error': 'Failed to fetch nearby properties'}),
+      headers: {'Content-Type': 'application/json'},
+    );
+  }
+});
+
+// GET /user-activities/:userId - Returns recent user activities
+router.get('/user-activities/<userId>', (Request req, String userId) async {
+  try {
+    final results = await db.mappedResultsQuery('''
+      SELECT * FROM user_activities 
+      WHERE user_id = @user_id 
+      ORDER BY created_at DESC 
+      LIMIT 10
+    ''', substitutionValues: {'user_id': userId});
+
+    final activities = results.map((row) => _convertDateTimes(row['user_activities'] ?? {})).toList();
+    return Response.ok(
+      jsonEncode({'activities': activities}),
+      headers: {'Content-Type': 'application/json'},
+    );
+  } catch (e) {
+    print('Error fetching user activities: $e');
+    return Response.internalServerError(
+      body: jsonEncode({'error': 'Failed to fetch user activities'}),
+      headers: {'Content-Type': 'application/json'},
+    );
+  }
+});
+
+// GET /user-expenses-chart/:userId - Returns expense data for charts
+router.get('/user-expenses-chart/<userId>', (Request req, String userId) async {
+  try {
+    final results = await db.mappedResultsQuery('''
+      SELECT category, SUM(amount) as amount 
+      FROM user_expenses 
+      WHERE user_id = @user_id
+      GROUP BY category
+      ORDER BY amount DESC
+      LIMIT 10
+    ''', substitutionValues: {'user_id': userId});
+
+    final expenses = results.map((row) => row['user_expenses'] ?? {}).toList();
+    return Response.ok(
+      jsonEncode({'data': expenses}),
+      headers: {'Content-Type': 'application/json'},
+    );
+  } catch (e) {
+    print('Error fetching expenses chart data: $e');
+    return Response.internalServerError(
+      body: jsonEncode({'error': 'Failed to fetch expenses data'}),
+      headers: {'Content-Type': 'application/json'},
+    );
+  }
+});
+
+// GET /user-savings-chart/:userId - Returns savings data for charts
+router.get('/user-savings-chart/<userId>', (Request req, String userId) async {
+  try {
+    final results = await db.mappedResultsQuery('''
+      SELECT source, SUM(amount) as amount 
+      FROM user_savings 
+      WHERE user_id = @user_id
+      GROUP BY source
+      ORDER BY amount DESC
+      LIMIT 10
+    ''', substitutionValues: {'user_id': userId});
+
+    final savings = results.map((row) => row['user_savings'] ?? {}).toList();
+    return Response.ok(
+      jsonEncode({'data': savings}),
+      headers: {'Content-Type': 'application/json'},
+    );
+  } catch (e) {
+    print('Error fetching savings chart data: $e');
+    return Response.internalServerError(
+      body: jsonEncode({'error': 'Failed to fetch savings data'}),
+      headers: {'Content-Type': 'application/json'},
+    );
+  }
+});
+
+
+// POST /user-financial-data - Create or update user financial data
+router.post('/user-financial-data', (Request req) async {
+  try {
+    final body = await req.readAsString();
+    final data = json.decode(body);
+    
+    final userId = data['user_id'];
+    final balance = data['balance'] ?? 0.0;
+    final totalExpenses = data['total_expenses'] ?? 0.0;
+    final totalSavings = data['total_savings'] ?? 0.0;
+    
+    await db.query('''
+      INSERT INTO user_financial_data (user_id, balance, total_expenses, total_savings, updated_at)
+      VALUES (@user_id, @balance, @total_expenses, @total_savings, NOW())
+      ON CONFLICT (user_id) 
+      DO UPDATE SET 
+        balance = @balance,
+        total_expenses = @total_expenses,
+        total_savings = @total_savings,
+        updated_at = NOW()
+    ''', substitutionValues: {
+      'user_id': userId,
+      'balance': balance,
+      'total_expenses': totalExpenses,
+      'total_savings': totalSavings,
+    });
+
+    return Response.ok(
+      jsonEncode({'success': true, 'message': 'Financial data updated successfully'}),
+      headers: {'Content-Type': 'application/json'},
+    );
+  } catch (e) {
+    print('Error updating financial data: $e');
+    return Response.internalServerError(
+      body: jsonEncode({'error': 'Failed to update financial data'}),
+      headers: {'Content-Type': 'application/json'},
+    );
+  }
+});
+
+// POST /user-activities - Add new user activity
+router.post('/user-activities', (Request req) async {
+  try {
+    final body = await req.readAsString();
+    final data = json.decode(body);
+    
+    await db.query('''
+      INSERT INTO user_activities (user_id, type, title, description, metadata, created_at)
+      VALUES (@user_id, @type, @title, @description, @metadata, NOW())
+    ''', substitutionValues: {
+      'user_id': data['user_id'],
+      'type': data['type'],
+      'title': data['title'],
+      'description': data['description'] ?? '',
+      'metadata': json.encode(data['metadata'] ?? {}),
+    });
+
+    return Response.ok(
+      jsonEncode({'success': true, 'message': 'Activity added successfully'}),
+      headers: {'Content-Type': 'application/json'},
+    );
+  } catch (e) {
+    print('Error adding activity: $e');
+    return Response.internalServerError(
+      body: jsonEncode({'error': 'Failed to add activity'}),
+      headers: {'Content-Type': 'application/json'},
+    );
+  }
+});
+
+// POST /user-topup - Add money to user account
+router.post('/user-topup', (Request req) async {
+  try {
+    final body = await req.readAsString();
+    final data = json.decode(body);
+    
+    final userId = data['user_id'];
+    final amount = double.parse(data['amount'].toString());
+    final method = data['method'] ?? 'bank_transfer';
+    final reference = data['reference'] ?? '';
+    
+    // Insert topup transaction
+    await db.query('''
+      INSERT INTO user_topups (user_id, amount, method, reference, status, created_at)
+      VALUES (@user_id, @amount, @method, @reference, 'pending', NOW())
+    ''', substitutionValues: {
+      'user_id': userId,
+      'amount': amount,
+      'method': method,
+      'reference': reference,
+    });
+
+    // Update user balance (assuming successful payment)
+    await db.query('''
+      UPDATE user_financial_data 
+      SET balance = balance + @amount, updated_at = NOW()
+      WHERE user_id = @user_id
+    ''', substitutionValues: {
+      'user_id': userId,
+      'amount': amount,
+    });
+
+    // Add activity log
+    await db.query('''
+      INSERT INTO user_activities (user_id, type, title, description, created_at)
+      VALUES (@user_id, 'topup', 'Account Top-up', @description, NOW())
+    ''', substitutionValues: {
+      'user_id': userId,
+      'description': 'Added ₦${amount.toStringAsFixed(2)} to account via $method',
+    });
+
+    return Response.ok(
+      jsonEncode({'success': true, 'message': 'Top-up successful', 'amount': amount}),
+      headers: {'Content-Type': 'application/json'},
+    );
+  } catch (e) {
+    print('Error processing topup: $e');
+    return Response.internalServerError(
+      body: jsonEncode({'error': 'Failed to process top-up'}),
+      headers: {'Content-Type': 'application/json'},
+    );
+  }
+});
+
+// GET /user-topups/:userId - Get user topup history
+router.get('/user-topups/<userId>', (Request req, String userId) async {
+  try {
+    final results = await db.mappedResultsQuery('''
+      SELECT * FROM user_topups 
+      WHERE user_id = @user_id 
+      ORDER BY created_at DESC 
+      LIMIT 20
+    ''', substitutionValues: {'user_id': userId});
+
+    final topups = results.map((row) => _convertDateTimes(row['user_topups'] ?? {})).toList();
+    return Response.ok(
+      jsonEncode({'topups': topups}),
+      headers: {'Content-Type': 'application/json'},
+    );
+  } catch (e) {
+    print('Error fetching topup history: $e');
+    return Response.internalServerError(
+      body: jsonEncode({'error': 'Failed to fetch topup history'}),
+      headers: {'Content-Type': 'application/json'},
+    );
+  }
+});
+
+// PUT /user-topup/:id - Update topup status
+router.put('/user-topup/<id>', (Request req, String id) async {
+  try {
+    final body = await req.readAsString();
+    final data = json.decode(body);
+    
+    await db.query('''
+      UPDATE user_topups 
+      SET status = @status, updated_at = NOW()
+      WHERE id = @id
+    ''', substitutionValues: {
+      'id': id,
+      'status': data['status'],
+    });
+
+    return Response.ok(
+      jsonEncode({'success': true, 'message': 'Topup status updated'}),
+      headers: {'Content-Type': 'application/json'},
+    );
+  } catch (e) {
+    print('Error updating topup status: $e');
+    return Response.internalServerError(
+      body: jsonEncode({'error': 'Failed to update topup status'}),
+      headers: {'Content-Type': 'application/json'},
+    );
+  }
+});
+
+// POST /user-expenses - Add new expense
+router.post('/user-expenses', (Request req) async {
+  try {
+    final body = await req.readAsString();
+    final data = json.decode(body);
+    
+    await db.query('''
+      INSERT INTO user_expenses (user_id, category, amount, description, created_at)
+      VALUES (@user_id, @category, @amount, @description, NOW())
+    ''', substitutionValues: {
+      'user_id': data['user_id'],
+      'category': data['category'],
+      'amount': double.parse(data['amount'].toString()),
+      'description': data['description'] ?? '',
+    });
+
+    return Response.ok(
+      jsonEncode({'success': true, 'message': 'Expense added successfully'}),
+      headers: {'Content-Type': 'application/json'},
+    );
+  } catch (e) {
+    print('Error adding expense: $e');
+    return Response.internalServerError(
+      body: jsonEncode({'error': 'Failed to add expense'}),
+      headers: {'Content-Type': 'application/json'},
+    );
+  }
+});
+
+// POST /user-savings - Add new savings
+router.post('/user-savings', (Request req) async {
+  try {
+    final body = await req.readAsString();
+    final data = json.decode(body);
+    
+    await db.query('''
+      INSERT INTO user_savings (user_id, source, amount, description, created_at)
+      VALUES (@user_id, @source, @amount, @description, NOW())
+    ''', substitutionValues: {
+      'user_id': data['user_id'],
+      'source': data['source'],
+      'amount': double.parse(data['amount'].toString()),
+      'description': data['description'] ?? '',
+    });
+
+    return Response.ok(
+      jsonEncode({'success': true, 'message': 'Savings added successfully'}),
+      headers: {'Content-Type': 'application/json'},
+    );
+  } catch (e) {
+    print('Error adding savings: $e');
+    return Response.internalServerError(
+      body: jsonEncode({'error': 'Failed to add savings'}),
+      headers: {'Content-Type': 'application/json'},
+    );
+  }
+});
+
+// DELETE /user-activities/:id - Delete user activity
+router.delete('/user-activities/<id>', (Request req, String id) async {
+  try {
+    await db.query('''
+      DELETE FROM user_activities WHERE id = @id
+    ''', substitutionValues: {'id': id});
+
+    return Response.ok(
+      jsonEncode({'success': true, 'message': 'Activity deleted successfully'}),
+      headers: {'Content-Type': 'application/json'},
+    );
+  } catch (e) {
+    print('Error deleting activity: $e');
+    return Response.internalServerError(
+      body: jsonEncode({'error': 'Failed to delete activity'}),
+      headers: {'Content-Type': 'application/json'},
+    );
+  }
+});
 
 
   // Get user by email - FIXED: More specific route pattern
