@@ -2598,88 +2598,37 @@ return Response.ok(jsonEncode(investments), headers: {
       final payload = await req.readAsString();
       final data = jsonDecode(payload);
       
+      
       // Validate required fields
-      if (data['amount'] == null || data['transaction_type'] == null) {
+      if (data['transaction_type'] == null || data['amount'] == null) {
         return Response.badRequest(
-          body: jsonEncode({'error': 'Missing required fields: amount, transaction_type'}),
+          body: jsonEncode({'error': 'Missing required fields: transaction_type, amount'}),
           headers: {'Content-Type': 'application/json'}
         );
       }
       
-      // Check if user exists
-      final userExists = await db.mappedResultsQuery(
-        'SELECT id FROM users WHERE id = @id',
-        substitutionValues: {'id': userId},
-      );
-
-      if (userExists.isEmpty) {
-        return Response.notFound(
-          jsonEncode({'error': 'User not found'}),
-          headers: {'Content-Type': 'application/json'}
-        );
-      }
-      
-      // Generate transaction ID
       final uuid = Uuid();
       final transactionId = uuid.v4();
       
-      // Insert transaction
       await db.execute('''
         INSERT INTO financial_transactions (
           id, user_id, transaction_type, amount, description, status, created_at
         ) VALUES (
-          @id, @user_id, @transaction_type, @amount, @description, @status, @created_at
+          @id, @user_id, @transaction_type, @amount, @description, @status, NOW()
         )
       ''', substitutionValues: {
         'id': transactionId,
         'user_id': userId,
         'transaction_type': data['transaction_type'],
-        'amount': data['amount'],
+        'amount': double.parse(data['amount'].toString()),
         'description': data['description'] ?? '',
         'status': data['status'] ?? 'completed',
-        'created_at': data['created_at'] ?? DateTime.now().toIso8601String(),
       });
-      
-      // Update user financial data based on transaction type
-      if (data['transaction_type'] == 'credit') {
-        await db.execute('''
-          UPDATE user_financial_data
-          SET total_funds = total_funds + @amount
-          WHERE user_id = @user_id
-        ''', substitutionValues: {
-          'user_id': userId,
-          'amount': data['amount'],
-        });
-      } else if (data['transaction_type'] == 'debit') {
-        await db.execute('''
-          UPDATE user_financial_data
-          SET total_funds = total_funds - @amount
-          WHERE user_id = @user_id
-        ''', substitutionValues: {
-          'user_id': userId,
-          'amount': data['amount'],
-        });
-      }
-      
-      // Get the created transaction
-      final result = await db.mappedResultsQuery(
-        'SELECT * FROM financial_transactions WHERE id = @id',
-        substitutionValues: {'id': transactionId},
-      );
-      
-      if (result.isEmpty) {
-        return Response.internalServerError(
-          body: jsonEncode({'error': 'Failed to fetch created transaction'}),
-          headers: {'Content-Type': 'application/json'}
-        );
-      }
-      
-      final transaction = _convertDateTimes(result.first['financial_transactions'] ?? {});
       
       return Response.ok(
         jsonEncode({
           'success': true,
-          'transaction': transaction,
+          'transaction_id': transactionId,
           'message': 'Transaction recorded successfully'
         }),
         headers: {'Content-Type': 'application/json'}
@@ -2694,18 +2643,81 @@ return Response.ok(jsonEncode(investments), headers: {
     }
   });
 
-  // Handle 404 routes
-  router.all('/<ignored|.*>', (Request req) {
-    return Response.notFound(jsonEncode({'error': 'Route not found: ${req.url}'}), headers: {'Content-Type': 'application/json'});
-  });
+  try {
+    // Create user_activities table if it doesn't exist
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS user_activities (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id),
+        type VARCHAR(50) NOT NULL,
+        title VARCHAR(255) NOT NULL,
+        description TEXT,
+        metadata JSONB DEFAULT '{}'::jsonb,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    ''');
 
-  // Create the handler pipeline
+    // Create user_topups table if it doesn't exist
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS user_topups (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id),
+        amount DECIMAL(15, 2) NOT NULL,
+        method VARCHAR(50) DEFAULT 'bank_transfer',
+        reference VARCHAR(255),
+        status VARCHAR(20) DEFAULT 'pending',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    ''');
+
+    // Create user_expenses table if it doesn't exist
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS user_expenses (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id),
+        category VARCHAR(100) NOT NULL,
+        amount DECIMAL(15, 2) NOT NULL,
+        description TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    ''');
+
+    // Create user_savings table if it doesn't exist
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS user_savings (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id),
+        source VARCHAR(100) NOT NULL,
+        amount DECIMAL(15, 2) NOT NULL,
+        description TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    ''');
+
+    // Update user_financial_data table structure
+    await db.execute('''
+      ALTER TABLE user_financial_data 
+      ADD COLUMN IF NOT EXISTS balance DECIMAL(15, 2) DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS total_expenses DECIMAL(15, 2) DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS total_savings DECIMAL(15, 2) DEFAULT 0
+    ''');
+
+    print('Dashboard tables created/updated successfully');
+  } catch (e) {
+    print('Error creating dashboard tables: $e');
+  }
+
   final handler = Pipeline()
       .addMiddleware(logRequests())
       .addMiddleware((innerHandler) {
         return (request) async {
           if (request.method == 'OPTIONS') {
-            return _cors(Response.ok(''));
+            return Response.ok('', headers: {
+              'Access-Control-Allow-Origin': '*',
+              'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+              'Access-Control-Allow-Headers': 'Origin, Content-Type, Accept, Authorization',
+            });
           }
           final response = await innerHandler(request);
           return _cors(response);
@@ -2713,7 +2725,34 @@ return Response.ok(jsonEncode(investments), headers: {
       })
       .addHandler(router);
 
-  final port = int.parse(Platform.environment['PORT'] ?? '8080');
-  final server = await serve(handler, InternetAddress.anyIPv4, port);
+  final server = await serve(handler, InternetAddress.anyIPv4, 8080);
   print('Server listening on port ${server.port}');
 }
+
+// Duplicate handlePaystackInitialize removed to resolve naming conflict.
+
+Future<Response> handlePaystackVerifyLegacy(Request request) async {
+  try {
+    final body = await request.readAsString();
+    final data = jsonDecode(body);
+    
+    final response = await http.get(
+      Uri.parse('https://api.paystack.co/transaction/verify/${data['reference']}'),
+      headers: {
+        'Authorization': 'Bearer YOUR_PAYSTACK_SECRET_KEY',
+        'Content-Type': 'application/json',
+      },
+    );
+    
+    return Response.ok(
+      response.body,
+      headers: {'Content-Type': 'application/json'}
+    );
+  } catch (e) {
+    return Response.internalServerError(
+      body: jsonEncode({'error': 'Payment verification failed: $e'}),
+      headers: {'Content-Type': 'application/json'}
+    );
+  }
+}
+
